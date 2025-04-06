@@ -4,7 +4,7 @@ import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                             QLineEdit, QPushButton, QComboBox, QTableWidget, QTableWidgetItem, 
                             QCalendarWidget, QCheckBox, QGroupBox, QMessageBox, QFileDialog, QFrame, 
-                            QScrollArea, QSizePolicy)
+                            QScrollArea, QSizePolicy,QCompleter,QAbstractItemView)
 from PyQt6.QtCore import Qt, QDate, QSettings
 from PyQt6.QtGui import QFont, QAction
 import sqlite3
@@ -42,7 +42,12 @@ class FrmGarden(QMainWindow):
         
         self.setup_database()
         self.load_initial_data()
-        
+
+        self.load_unique_clients()  # Načítanie klientov z databázy
+        # completer = QCompleter(self.unique_clients, self)
+        # completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)  # Ignorovanie veľkosti písmen
+        # self.txtClients.setCompleter(completer)
+
     def init_ui(self):
         # Vytvorenie menu bar
         menubar = self.menuBar()
@@ -156,31 +161,47 @@ class FrmGarden(QMainWindow):
         income_layout.addWidget(self.txtBank)
         
         input_layout.addWidget(income_group)
-        
+      
         # Expenses section
         expenses_group = QGroupBox("EXPENSE")
-        expenses_layout = QVBoxLayout(expenses_group)
-        
+        expenses_layout = QHBoxLayout(expenses_group)  # Zmena na horizontálny layout
+
+        # Ľavá strana - EXPENSES a COST
+        left_expenses = QVBoxLayout()
         self.txtExpenses = QLineEdit()
         self.txtExpenses.setPlaceholderText("Expenses Description")
-        expenses_layout.addWidget(QLabel("EXPENSES:"))
-        expenses_layout.addWidget(self.txtExpenses)
-        
         self.txtExpensesCost = QLineEdit()
-        self.txtExpensesCost.setPlaceholderText("Cost")
-        expenses_layout.addWidget(QLabel("COST:"))
-        expenses_layout.addWidget(self.txtExpensesCost)
-        
-        self.chckExpesiveCash = QCheckBox("EXPENSES CASH")
-        expenses_layout.addWidget(self.chckExpesiveCash)
-        
+        self.txtExpensesCost.setPlaceholderText("Cost of Expenses")
+
+        left_expenses.addWidget(QLabel("EXPENSES:"))
+        left_expenses.addWidget(self.txtExpenses)
+        left_expenses.addWidget(QLabel("COST COMPLETE:"))
+        left_expenses.addWidget(self.txtExpensesCost)
+
+        # Pravá strana - EXPENSES CASH a CASH FOR STAFF
+        right_expenses = QVBoxLayout()
+        self.txtCashForStaff = QLineEdit()
+        self.txtCashForStaff.setPlaceholderText("Cash for staff")
+        # self.txtCashForStaff.setValidator(QIntValidator(0, 1))  # Povolí len 0 alebo 1
+
+        self.txtCashForStaffName = QLineEdit()
+        self.txtCashForStaffName.setPlaceholderText("Staff name")
+
+        right_expenses.addWidget(QLabel("CASH FOR STAFF:"))
+        right_expenses.addWidget(self.txtCashForStaffName)
+        right_expenses.addWidget(QLabel("EXPENSES CASH:"))
+        right_expenses.addWidget(self.txtCashForStaff)
+
+        # Pridanie ľavej a pravej časti do hlavného layoutu
+        expenses_layout.addLayout(left_expenses)
+        expenses_layout.addLayout(right_expenses)
         input_layout.addWidget(expenses_group)
         
         # Buttons
         buttons_layout = QHBoxLayout()
         
         self.btnPridaj = QPushButton("Add")
-        self.btnPridaj.setEnabled(False)
+        self.btnPridaj.setEnabled(True)
         self.btnPridaj.clicked.connect(self.btnPridaj_Click)
         
         self.btnEdit = QPushButton("Edit")
@@ -232,11 +253,13 @@ class FrmGarden(QMainWindow):
         self.lblExpensesResult = QLabel("EXPENSES: 0.00 £")
         self.lblExpensesCashResult = QLabel("EXPENSES CASH: 0.00 £")
         self.lblTotalExpenses = QLabel("TOTAL EXPENSES: 0.00 £")
+        self.lblStaffCost = QLabel("STAFF COST: 0.00 £")  # Nový QLabel pre StaffCost
         
         expense_results_layout.addWidget(self.lblExpensesResult)
         expense_results_layout.addWidget(self.lblExpensesCashResult)
         expense_results_layout.addWidget(self.lblTotalExpenses)
         results_layout.addWidget(expense_results)
+        expense_results_layout.addWidget(self.lblStaffCost)  # Pridanie StaffCost 
         
         # Profit results
         profit_results = QGroupBox("PROFIT ANALYSIS")
@@ -246,6 +269,11 @@ class FrmGarden(QMainWindow):
         self.lblNetProfit = QLabel("NET PROFIT (after cash expenses): 0.00 £")
         self.lblProfitMargin = QLabel("PROFIT MARGIN: 0%")
         
+        # Nastavenie tooltipov pre každý riadok
+        self.lblGrossProfit.setToolTip("Celkový zisk pred odpočítaním nákladov.")
+        self.lblNetProfit.setToolTip("Čistý zisk po odpočítaní všetkých nákladov.")
+        self.lblProfitMargin.setToolTip("Percentuálny podiel zisku na celkových príjmoch.")
+
         profit_results_layout.addWidget(self.lblGrossProfit)
         profit_results_layout.addWidget(self.lblNetProfit)
         profit_results_layout.addWidget(self.lblProfitMargin)
@@ -253,8 +281,11 @@ class FrmGarden(QMainWindow):
         
         # Data table
         self.DGZoznam = QTableWidget()
-        self.DGZoznam.setColumnCount(8)
-        self.DGZoznam.setHorizontalHeaderLabels(["Date", "Client", "Cash", "Check", "Bank", "Expenses", "Cost", "Cash Exp"])
+        self.DGZoznam.setColumnCount(9)
+        self.DGZoznam.setHorizontalHeaderLabels(["Date", "Client", "Cash", "Check", "Bank", "ExpensesDesc", "ExpCost","StaffCost", "StaffName"])
+        self.DGZoznam.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.DGZoznam.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.DGZoznam.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.DGZoznam.cellClicked.connect(self.DGZoznam_CellClick)
         self.DGZoznam.cellDoubleClicked.connect(self.DGZoznam_CellContentDoubleClick)
 
@@ -278,7 +309,7 @@ class FrmGarden(QMainWindow):
         self.table_initialized = True
 
         # Nastavte tučné písmo pre výsledkové QLabel widgety
-        self.nastav_tucne_pismo_pre_vysledky()
+        self.nastav_tucne_pismo_pre_vysledky_textboxe()
 
     def handle_header_click(self, column):
         """Spracovanie kliknutia na hlavičku stĺpca."""
@@ -306,7 +337,7 @@ class FrmGarden(QMainWindow):
         self.last_sorted_column = column        
 
     # Pridajte túto metódu do triedy FrmGarden
-    def nastav_tucne_pismo_pre_vysledky(self):
+    def nastav_tucne_pismo_pre_vysledky_textboxe(self):
         """Nastaví tučné písmo pre všetky výsledkové QLabel widgety."""
         bold_font = QFont()
         bold_font.setBold(True)
@@ -323,7 +354,18 @@ class FrmGarden(QMainWindow):
         
         self.lblGrossProfit.setFont(bold_font)
         self.lblNetProfit.setFont(bold_font)
-        self.lblProfitMargin.setFont(bold_font)        
+        self.lblProfitMargin.setFont(bold_font) 
+        
+        # Nastavte tučné písmo pre všetky textové polia
+        self.txtSelectDate.setFont(bold_font)
+        self.txtClients.setFont(bold_font)
+        self.txtCash.setFont(bold_font)
+        self.txtCheck.setFont(bold_font)
+        self.txtBank.setFont(bold_font)
+        self.txtExpenses.setFont(bold_font)
+        self.txtExpensesCost.setFont(bold_font)
+        self.txtCashForStaff.setFont(bold_font)
+        self.txtCashForStaffName.setFont(bold_font)       
 
     def zmen_velkost_pisma(self, velkost, ulozit_nastavenie=True):
         """Zmení veľkosť písma pre celú aplikáciu"""
@@ -374,8 +416,6 @@ class FrmGarden(QMainWindow):
         cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='TableGarden{year}';")
         result = cursor.fetchone()
         
-        # conn.close()
-
         # If fetchone() returns None, table does not exist
         return result is not None
     
@@ -386,13 +426,14 @@ class FrmGarden(QMainWindow):
         CREATE TABLE IF NOT EXISTS TableGarden{year} (
             Id INTEGER PRIMARY KEY AUTOINCREMENT,
             Date TEXT,
-            Client TEXT,
+            [CLIENTS NAME] TEXT,
             Cash REAL,
-            CheckAmount REAL,
-            BankTransfer REAL,
+            [CHECK] REAL,                 
+            [BANK TRANSFER] REAL,
             Expenses TEXT,
-            Cost REAL,
-            CashExpense INTEGER
+            [EXPENSES COSTS] REAL,
+            CashForStaff REAL,               
+            CashForStaffName TEXT
         )
         """)
         
@@ -405,10 +446,10 @@ class FrmGarden(QMainWindow):
     # ============= EVENT HANDLERS ==============
     def btnDelete_Click(self):
         reply = QMessageBox.question(self, 'Delete Record', 
-                                    "Delete this record?", 
+                                    f"Delete this record , nr. {self.Riadok} ?", 
                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
         
-        if reply == QMessageBox.StandardButton.Yes and self.OznacenieRiadku:
+        if reply == QMessageBox.StandardButton.Yes:
             self.VymazatZaznam()
             self.NacitajDatabazu()
     
@@ -424,20 +465,25 @@ class FrmGarden(QMainWindow):
         None
     
     def DGZoznam_CellContentDoubleClick(self, row, column):
+        self.Riadok = self.row_ids[row]
         if row != -1:
-            self.Riadok = int(self.DGZoznam.item(row, 0).text())
+            # self.Riadok = int(self.DGZoznam.item(row, 0).text())
             self.MazanietxtPopridaniDoSql()
+
+            self.txtSelectDate.setText(self.DGZoznam.item(row, 0).text())
+            self.txtClients.setText(self.DGZoznam.item(row, 1).text())
+            self.txtCash.setText(self.DGZoznam.item(row, 2).text())
+            self.txtCheck.setText(self.DGZoznam.item(row, 3).text())
+            self.txtBank.setText(self.DGZoznam.item(row, 4).text())
+            self.txtExpenses.setText(self.DGZoznam.item(row, 5).text())
+            self.txtExpensesCost.setText(self.DGZoznam.item(row, 6).text())
             
-            self.txtSelectDate.setText(self.DGZoznam.item(row, 1).text())
-            self.txtClients.setText(self.DGZoznam.item(row, 2).text())
-            self.txtCash.setText(self.DGZoznam.item(row, 3).text())
-            self.txtCheck.setText(self.DGZoznam.item(row, 4).text())
-            self.txtBank.setText(self.DGZoznam.item(row, 5).text())
-            self.txtExpenses.setText(self.DGZoznam.item(row, 6).text())
-            self.txtExpensesCost.setText(self.DGZoznam.item(row, 7).text())
-            self.chckExpesiveCash.setChecked(self.DGZoznam.item(row, 8).text() == "1")
+            if self.current_year >= '2025':
+                self.txtCashForStaff.setText(self.DGZoznam.item(row, 7).text())
+                self.txtCashForStaffName.setText(self.DGZoznam.item(row, 8).text())
             
             self.btnEdit.setEnabled(True)
+            self.btnDelete.setEnabled(True)
     
     def Calendar_DateSelected(self):
         selected_date = self.Calendar.selectedDate()
@@ -456,8 +502,8 @@ class FrmGarden(QMainWindow):
         # Vytvoríme novú tabuľku
         self.DGZoznam = QTableWidget()
         self.DGZoznam.setObjectName("DGZoznam")
-        self.DGZoznam.setColumnCount(8)
-        self.DGZoznam.setHorizontalHeaderLabels(["Date", "Client", "Cash", "Check", "Bank", "Expenses", "Cost", "Cash Exp"])
+        self.DGZoznam.setColumnCount(9)
+        self.DGZoznam.setHorizontalHeaderLabels(["Date", "Client", "Cash", "Check", "Bank", "ExpensesDesc", "ExpCost","StaffCash", "StaffName"])
         self.DGZoznam.cellClicked.connect(self.DGZoznam_CellClick)
         self.DGZoznam.cellDoubleClicked.connect(self.DGZoznam_CellContentDoubleClick)
         self.last_sorted_column = None  # Uloženie posledného zoradeného stĺpca
@@ -480,13 +526,17 @@ class FrmGarden(QMainWindow):
         self.btnPridaj.setEnabled(bool(text))
     
     def btnPridaj_Click(self):
-        reply = QMessageBox.question(self, 'Add Record', 
-                                    f"Add this record?", 
-                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            self.ZalozitZaznam()
-            self.NacitajDatabazu()
+
+        if self.txtClients.text() and self.txtSelectDate.text():
+            reply = QMessageBox.question(self, 'Add Record', 
+                                        f"Add this record?", 
+                                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                self.ZalozitZaznam()
+                self.NacitajDatabazu()
+        else:
+            QMessageBox.information(self,"Error","Write at least the Date and the Client",QMessageBox.StandardButton.Ok)
     
     def btnEdit_Click(self):
         reply = QMessageBox.question(self, 'Edit Record', 
@@ -506,8 +556,11 @@ class FrmGarden(QMainWindow):
             rows = cursor.fetchall()
             
             self.DGZoznam.setRowCount(len(rows))
+
+            self.row_ids = []  # Uložíme ID pre každý riadok
             
             for row_idx, row in enumerate(rows):
+                self.row_ids.append(row[0])  # Prvé pole (Id) uložíme do zoznamu
                 for col_idx, value in enumerate(row[1:]):  # Skip ID column
                     numeric_columns = [2, 3, 4, 6, 7]  # Indexy stĺpcov s číselnými hodnotami
                     if col_idx in numeric_columns:
@@ -524,6 +577,37 @@ class FrmGarden(QMainWindow):
             self.StatistikaVypocet()
         except Exception as ex:
             QMessageBox.critical(self +  'Metoda: NacitajDatabazu', "Error", str(ex))
+
+    def load_unique_clients(self):
+        """Načíta unikátne hodnoty klientov z databázy, ak nie sú v aktuálnom roku, použije predchádzajúci rok."""
+        try:
+            cursor = self.conn.cursor()
+            
+            # 1. Skúsi načítať klientov z aktuálneho roka
+            cursor.execute(f"SELECT DISTINCT [CLIENTS NAME] FROM TableGarden{self.current_year};")
+            rows_current = cursor.fetchall()
+            self.unique_clients = [row[0] for row in rows_current if row[0]]
+            
+            # 2. Ak nie sú žiadni klienti v aktuálnom roku
+            if not self.unique_clients:
+                previous_year = str(int(self.current_year) - 1)
+                
+                # Skontroluje existenciu tabuľky pre predchádzajúci rok
+                cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='TableGarden{previous_year}';")
+                if cursor.fetchone():
+                    # Načíta klientov z predchádzajúceho roka
+                    cursor.execute(f"SELECT DISTINCT [CLIENTS NAME] FROM TableGarden{previous_year};")
+                    rows_previous = cursor.fetchall()
+                    self.unique_clients = [row[0] for row in rows_previous if row[0]]
+            
+            # 3. Nastavenie autocomplete
+            completer = QCompleter(self.unique_clients, self)
+            completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+            self.txtClients.setCompleter(completer)
+            
+        except Exception as ex:
+            QMessageBox.critical(self, "Error", f"Chyba pri načítaní klientov: {str(ex)}")
+
 
     def NacitajDatabazuPodlaMesiac(self, month_number,year):
         try:
@@ -555,8 +639,8 @@ class FrmGarden(QMainWindow):
             
             sql = f"""
             INSERT INTO TableGarden{self.cbRok.currentText()} 
-            (Date, Client, Cash, CheckAmount, BankTransfer, Expenses, Cost, CashExpense) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (Date, [CLIENTS NAME], Cash, [CHECK], [BANK TRANSFER], Expenses, [EXPENSES COSTS], CashForStaff, CashForStaffName)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
             
             values = (
@@ -567,7 +651,8 @@ class FrmGarden(QMainWindow):
                 float(self.txtBank.text()) if self.txtBank.text() else 0,
                 self.txtExpenses.text(),
                 float(self.txtExpensesCost.text()) if self.txtExpensesCost.text() else 0,
-                1 if self.chckExpesiveCash.isChecked() else 0
+                float(self.txtCashForStaff.text()) if self.txtCashForStaff.text() else 0,
+                self.txtCashForStaffName.text()
             )
             
             cursor.execute(sql, values)
@@ -586,8 +671,8 @@ class FrmGarden(QMainWindow):
             
             sql = f"""
             UPDATE TableGarden{self.cbRok.currentText()} 
-            SET Date=?, Client=?, Cash=?, CheckAmount=?, BankTransfer=?, 
-            Expenses=?, Cost=?, CashExpense=?
+            SET Date=?, [CLIENTS NAME]=?, Cash=?, [CHECK]=?, [BANK TRANSFER]=?, 
+            Expenses=?, [EXPENSES COSTS]=?, CashForStaff=?, CashForStaffName=?
             WHERE Id=?
             """
             
@@ -599,13 +684,14 @@ class FrmGarden(QMainWindow):
                 float(self.txtBank.text()) if self.txtBank.text() else 0,
                 self.txtExpenses.text(),
                 float(self.txtExpensesCost.text()) if self.txtExpensesCost.text() else 0,
-                1 if self.chckExpesiveCash.isChecked() else 0,
+                float(self.txtCashForStaff.text()) if self.txtCashForStaff.text() else 0,
+                self.txtCashForStaffName.text(),
                 self.Riadok
             )
             
             cursor.execute(sql, values)
             conn.commit()
-            conn.close()
+            # conn.close()
             
             QMessageBox.information(self, "Success", "Record updated")
         except Exception as ex:
@@ -620,9 +706,11 @@ class FrmGarden(QMainWindow):
             cursor.execute(sql, (self.Riadok,))
             
             conn.commit()
-            conn.close()
+            # conn.close()
             
             QMessageBox.information(self, "Success", "Record deleted")
+            self.MazanietxtPopridaniDoSql()
+
         except Exception as ex:
             QMessageBox.critical(self, "Error", str(ex))
     
@@ -634,61 +722,73 @@ class FrmGarden(QMainWindow):
         self.txtBank.clear()
         self.txtExpenses.clear()
         self.txtExpensesCost.clear()
-        self.chckExpesiveCash.setChecked(False)
+        self.txtCashForStaff.clear()
+        self.txtCashForStaffName.clear()
         self.btnDelete.setEnabled(False)
         self.btnEdit.setEnabled(False)
-        self.btnPridaj.setEnabled(False)
+        self.btnPridaj.setEnabled(True)
     
     def StatistikaVypocet(self):
-        total_cash = 0
-        total_check = 0
-        total_bank = 0
-        total_expenses = 0
-        total_cash_expenses = 0
-        
-        for row in range(self.DGZoznam.rowCount()):
-            # Income
-            cash_item = self.DGZoznam.item(row, 2)
-            if cash_item and cash_item.text():
-                total_cash += float(cash_item.text())
-            
-            check_item = self.DGZoznam.item(row, 3)
-            if check_item and check_item.text():
-                total_check += float(check_item.text())
-            
-            bank_item = self.DGZoznam.item(row, 4)
-            if bank_item and bank_item.text():
-                total_bank += float(bank_item.text())
-            
-            # Expenses
-            cost_item = self.DGZoznam.item(row, 6)
-            if cost_item and cost_item.text():
-                total_expenses += float(cost_item.text())
+        try:
                 
-                # Check if this was a cash expense
-                cash_exp_item = self.DGZoznam.item(row, 7)
-                if cash_exp_item and cash_exp_item.text() == "1":
-                    total_cash_expenses += float(cost_item.text())
-        
-        # Calculate totals
-        total_income = total_cash + total_check + total_bank
-        gross_profit = total_income - total_expenses
-        net_profit = total_income - total_expenses  # Same as gross in this simple model
-        profit_margin = (gross_profit / total_income * 100) if total_income > 0 else 0
-        
-        # Update UI with bold font for numeric values
-        self.update_label_with_bold(self.lblCashResult, f"CASH: <b>{total_cash:.2f} £</b>")
-        self.update_label_with_bold(self.lblCheckResult, f"CHECK: <b>{total_check:.2f} £</b>")
-        self.update_label_with_bold(self.lblBankResult, f"BANK TRANSFER: <b>{total_bank:.2f} £</b>")
-        self.update_label_with_bold(self.lblTotalIncome, f"TOTAL INCOME: <b>{total_income:.2f} £</b>")
-        
-        self.update_label_with_bold(self.lblExpensesResult, f"EXPENSES: <b>{total_expenses:.2f} £</b>")
-        self.update_label_with_bold(self.lblExpensesCashResult, f"EXPENSES CASH: <b>{total_cash_expenses:.2f} £</b>")
-        self.update_label_with_bold(self.lblTotalExpenses, f"TOTAL EXPENSES: <b>{total_expenses:.2f} £</b>")
-        
-        self.update_label_with_bold(self.lblGrossProfit, f"GROSS PROFIT: <b>{gross_profit:.2f} £</b>")
-        self.update_label_with_bold(self.lblNetProfit, f"NET PROFIT: <b>{net_profit:.2f} £</b>")
-        self.update_label_with_bold(self.lblProfitMargin, f"PROFIT MARGIN: <b>{profit_margin:.1f}%</b>")
+            total_cash = 0
+            total_check = 0
+            total_bank = 0
+            total_expenses = 0
+            total_cash_expenses = 0
+            staff_cost = 0  # Inicializácia StaffCost
+            
+            for row in range(self.DGZoznam.rowCount()):
+                # Income
+                cash_item = self.DGZoznam.item(row, 2)
+                if cash_item and cash_item.text():
+                    total_cash += float(cash_item.text())
+                
+                check_item = self.DGZoznam.item(row, 3)
+                if check_item and check_item.text():
+                    total_check += float(check_item.text())
+                
+                bank_item = self.DGZoznam.item(row, 4)
+                if bank_item and bank_item.text():
+                    total_bank += float(bank_item.text())
+                
+                # Expenses
+                cost_item = self.DGZoznam.item(row, 6)
+                if cost_item and cost_item.text():
+                    total_expenses += float(cost_item.text())
+                    
+                    # # Check if this was a cash expense
+                    # cash_exp_item = self.DGZoznam.item(row, 7)
+                    # if cash_exp_item and cash_exp_item.text() == "1":
+                    #     total_cash_expenses += float(cost_item.text())
+
+                    # Staff Cost
+                staff_cost_item = self.DGZoznam.item(row, 7)  # Stĺpec CashForStaff
+                if staff_cost_item and staff_cost_item.text():
+                    staff_cost += float(staff_cost_item.text())                    
+            
+            # Calculate totals
+            total_income = total_cash + total_check + total_bank
+            gross_profit = total_income - total_expenses
+            net_profit = total_income - total_expenses  # Same as gross in this simple model
+            profit_margin = (gross_profit / (total_cash + total_check + total_bank) * 100) if (total_cash + total_check + total_bank) > 0 else 0
+            
+            # Update UI with bold font for numeric values
+            self.update_label_with_bold(self.lblCashResult, f"CASH: <b>{total_cash:.2f} £</b>")
+            self.update_label_with_bold(self.lblCheckResult, f"CHECK: <b>{total_check:.2f} £</b>")
+            self.update_label_with_bold(self.lblBankResult, f"BANK TRANSFER: <b>{total_bank:.2f} £</b>")
+            self.update_label_with_bold(self.lblTotalIncome, f"TOTAL INCOME: <b>{total_income:.2f} £</b>")
+            
+            self.update_label_with_bold(self.lblExpensesResult, f"EXPENSES: <b>{total_expenses:.2f} £</b>")
+            self.update_label_with_bold(self.lblExpensesCashResult, f"<s>EXPENSES CASH: <b>{total_cash_expenses:.2f} £</b></s>")
+            self.update_label_with_bold(self.lblTotalExpenses, f"TOTAL EXPENSES: <b>{total_expenses:.2f} £</b>")
+            self.lblStaffCost.setText(f"STAFF COST: <b>{staff_cost:.2f} £</b>")  # Aktualizácia StaffCost
+            
+            self.update_label_with_bold(self.lblGrossProfit, f"GROSS PROFIT: <b>{gross_profit:.2f} £</b>") #((total_cash + total_check + total_bank) - total_expenses)
+            self.update_label_with_bold(self.lblNetProfit, f"NET PROFIT: <b>{net_profit:.2f} £</b>") #(total_income - total_expenses)
+            self.update_label_with_bold(self.lblProfitMargin, f"PROFIT MARGIN: <b>{profit_margin:.1f}%</b>") #((gross_profit / (total_cash + total_check + total_bank) * 100))
+        except Exception as ex:
+            QMessageBox.critical(self, "Error", f"Chyba pri Statistike: {str(ex)}")
 
     def update_label_with_bold(self, label, text):
         """Aktualizuje QLabel s tučným písmom iba pre číselné hodnoty."""
@@ -752,6 +852,8 @@ class FrmGarden(QMainWindow):
             
             # Aktualizujeme názov výsledkovej skupiny
             self.results_group.setTitle(f"RESULTS FOR YEAR: {self.current_year}") 
+            # Aktualizácia autocomplete pre Client
+            self.load_unique_clients()
         except RuntimeError:
             # Obnovíme tabuľku, ak bola zničená
             self.reinit_table()
