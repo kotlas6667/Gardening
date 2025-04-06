@@ -1,11 +1,12 @@
-from Config import NAZOV_APP,NAZOV_FIRMY
+from Config import NAZOV_APP, NAZOV_FIRMY,HEIGHT,WIDTH,X_POSITION,Y_POSITION
 import sys
 import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                             QLineEdit, QPushButton, QComboBox, QTableWidget, QTableWidgetItem, 
-                            QCalendarWidget, QCheckBox, QGroupBox, QMessageBox, QFileDialog, QFrame,QScrollArea)
-from PyQt6.QtCore import Qt, QDate,QSettings
-from PyQt6.QtGui import QFont,QAction
+                            QCalendarWidget, QCheckBox, QGroupBox, QMessageBox, QFileDialog, QFrame, 
+                            QScrollArea, QSizePolicy)
+from PyQt6.QtCore import Qt, QDate, QSettings
+from PyQt6.QtGui import QFont, QAction
 import sqlite3
 import openpyxl
 from openpyxl import Workbook
@@ -13,60 +14,69 @@ from openpyxl import Workbook
 class FrmGarden(QMainWindow):
     def __init__(self):
         super().__init__()
-        
+
         self.setWindowTitle(NAZOV_APP)
-        self.setGeometry(100, 100, 1000, 700)
+        self.setGeometry(X_POSITION, Y_POSITION, WIDTH, HEIGHT)
         
         # Inicializácia nastavení
         self.settings = QSettings(NAZOV_FIRMY, NAZOV_APP)
-
+        
         # Vytvorenie hlavného scroll area
         self.scroll = QScrollArea()
-        self.scroll.setWidgetResizable(True)  # Umožní widgetu meniť veľkosť
-
+        self.scroll.setWidgetResizable(True)
+        
         # Hlavný widget, ktorý bude obsahovať všetky prvky
         self.main_widget = QWidget()
-        self.main_layout = QVBoxLayout(self.main_widget)       
-
-        # Pôvodný obsah z init_ui presunieme sem
-        # self.init_ui_content()         
-
+        self.main_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # Hlavný layout pre main_widget
+        self.main_layout = QVBoxLayout(self.main_widget)
+        self.main_layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Inicializácia UI
         self.init_ui()
+        
+        # Nastavenie scroll area
+        self.scroll.setWidget(self.main_widget)
+        self.setCentralWidget(self.scroll)
+        
         self.setup_database()
         self.load_initial_data()
         
     def init_ui(self):
+        # Vytvorenie menu bar
         menubar = self.menuBar()
-
-        main_widget = QWidget()
-        main_layout = QVBoxLayout()
-
+        
         # Vytvorenie menu "Zobrazenie"
-        view_menu = menubar.addMenu("Zobrazenie")
-
+        view_menu = menubar.addMenu("Font")
+        
         # Vytvorenie akcií pre veľkosť písma
-        male_pismo_action = QAction("Malé písmo", self)
-        stredne_pismo_action = QAction("Stredné písmo", self)
-        velke_pismo_action = QAction("Veľké písmo", self)
-
-        # Pridanie akcií do menu
-        view_menu.addAction(male_pismo_action)
-        view_menu.addAction(stredne_pismo_action)
-        view_menu.addAction(velke_pismo_action)        
-
+        male_pismo_action = QAction("Small", self)
+        stredne_pismo_action = QAction("Medium", self)
+        velke_pismo_action = QAction("Large", self)
+        
         # Pripojenie akcií k handlerom
         male_pismo_action.triggered.connect(lambda: self.zmen_velkost_pisma(10))
         stredne_pismo_action.triggered.connect(lambda: self.zmen_velkost_pisma(12))
         velke_pismo_action.triggered.connect(lambda: self.zmen_velkost_pisma(14))
-
+        
+        # Pridanie akcií do menu
+        view_menu.addAction(male_pismo_action)
+        view_menu.addAction(stredne_pismo_action)
+        view_menu.addAction(velke_pismo_action)
+        
         # Načítanie uloženej veľkosti písma alebo použitie predvolenej
         ulozena_velkost = self.settings.value("velkost_pisma", 12, type=int)
         self.zmen_velkost_pisma(ulozena_velkost, ulozit_nastavenie=False)
         
-        # Create a frame for the header
+        # Header frame
         header_frame = QFrame()
         header_frame.setFrameShape(QFrame.Shape.StyledPanel)
-        header_layout = QHBoxLayout()
+        header_layout = QHBoxLayout(header_frame)
+
+        # Vytvorenie results_group (nahradzuje pôvodné gbResult)
+        self.results_group = QGroupBox("RESULTS")
+        results_layout = QVBoxLayout(self.results_group)
         
         # Add title label
         title_label = QLabel(NAZOV_APP)
@@ -88,19 +98,17 @@ class FrmGarden(QMainWindow):
         header_layout.addWidget(QLabel("Month:"))
         header_layout.addWidget(self.cbMonths)
         
-        # self.setup_initial_data()
+        self.main_layout.addWidget(header_frame)
         
-        header_frame.setLayout(header_layout)
-        main_layout.addWidget(header_frame)
-        
-        # Create main content area
+        # Main content area
         content_widget = QWidget()
-        content_layout = QHBoxLayout()
+        content_layout = QHBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
         
         # Left panel - Input section
         left_panel = QFrame()
         left_panel.setFrameShape(QFrame.Shape.StyledPanel)
-        left_layout = QVBoxLayout()
+        left_layout = QVBoxLayout(left_panel)
         
         # Calendar
         self.Calendar = QCalendarWidget()
@@ -110,21 +118,27 @@ class FrmGarden(QMainWindow):
         
         # Input fields
         input_group = QGroupBox("Transaction Details")
-        input_layout = QVBoxLayout()
+        input_layout = QVBoxLayout(input_group)
         
+        # Date input
+        date_layout = QHBoxLayout()
+        date_layout.addWidget(QLabel("Date:"))
         self.txtSelectDate = QLineEdit()
         self.txtSelectDate.setPlaceholderText("YYYY-MM-DD")
-        input_layout.addWidget(QLabel("Date:"))
-        input_layout.addWidget(self.txtSelectDate)
+        date_layout.addWidget(self.txtSelectDate)
+        input_layout.addLayout(date_layout)
         
+        # Client input
+        client_layout = QHBoxLayout()
+        client_layout.addWidget(QLabel("Client:"))
         self.txtClients = QLineEdit()
         self.txtClients.setPlaceholderText("Client Name")
-        input_layout.addWidget(QLabel("Client:"))
-        input_layout.addWidget(self.txtClients)
+        client_layout.addWidget(self.txtClients)
+        input_layout.addLayout(client_layout)
         
         # Income section
         income_group = QGroupBox("INCOME")
-        income_layout = QVBoxLayout()
+        income_layout = QVBoxLayout(income_group)
         
         self.txtCash = QLineEdit()
         self.txtCash.setPlaceholderText("Cash")
@@ -141,12 +155,11 @@ class FrmGarden(QMainWindow):
         income_layout.addWidget(QLabel("BANK TRANSFER:"))
         income_layout.addWidget(self.txtBank)
         
-        income_group.setLayout(income_layout)
         input_layout.addWidget(income_group)
         
         # Expenses section
         expenses_group = QGroupBox("EXPENSE")
-        expenses_layout = QVBoxLayout()
+        expenses_layout = QVBoxLayout(expenses_group)
         
         self.txtExpenses = QLineEdit()
         self.txtExpenses.setPlaceholderText("Expenses Description")
@@ -161,7 +174,6 @@ class FrmGarden(QMainWindow):
         self.chckExpesiveCash = QCheckBox("EXPENSES CASH")
         expenses_layout.addWidget(self.chckExpesiveCash)
         
-        expenses_group.setLayout(expenses_layout)
         input_layout.addWidget(expenses_group)
         
         # Buttons
@@ -184,23 +196,23 @@ class FrmGarden(QMainWindow):
         buttons_layout.addWidget(self.btnDelete)
         
         input_layout.addLayout(buttons_layout)
-        input_group.setLayout(input_layout)
         left_layout.addWidget(input_group)
-        left_panel.setLayout(left_layout)
         content_layout.addWidget(left_panel)
         
         # Right panel - Results section
         right_panel = QFrame()
         right_panel.setFrameShape(QFrame.Shape.StyledPanel)
-        right_layout = QVBoxLayout()
+        right_layout = QVBoxLayout(right_panel)
+
+
         
         # Results section
         results_group = QGroupBox("RESULTS")
-        results_layout = QVBoxLayout()
+        results_layout = QVBoxLayout(results_group)
         
         # Income results
         income_results = QGroupBox("INCOME RESULTS")
-        income_results_layout = QVBoxLayout()
+        income_results_layout = QVBoxLayout(income_results)
         
         self.lblCashResult = QLabel("CASH: 0.00 £")
         self.lblCheckResult = QLabel("CHECK: 0.00 £")
@@ -211,12 +223,11 @@ class FrmGarden(QMainWindow):
         income_results_layout.addWidget(self.lblCheckResult)
         income_results_layout.addWidget(self.lblBankResult)
         income_results_layout.addWidget(self.lblTotalIncome)
-        income_results.setLayout(income_results_layout)
         results_layout.addWidget(income_results)
         
         # Expense results
         expense_results = QGroupBox("EXPENSE RESULTS")
-        expense_results_layout = QVBoxLayout()
+        expense_results_layout = QVBoxLayout(expense_results)
         
         self.lblExpensesResult = QLabel("EXPENSES: 0.00 £")
         self.lblExpensesCashResult = QLabel("EXPENSES CASH: 0.00 £")
@@ -225,12 +236,11 @@ class FrmGarden(QMainWindow):
         expense_results_layout.addWidget(self.lblExpensesResult)
         expense_results_layout.addWidget(self.lblExpensesCashResult)
         expense_results_layout.addWidget(self.lblTotalExpenses)
-        expense_results.setLayout(expense_results_layout)
         results_layout.addWidget(expense_results)
         
         # Profit results
         profit_results = QGroupBox("PROFIT ANALYSIS")
-        profit_results_layout = QVBoxLayout()
+        profit_results_layout = QVBoxLayout(profit_results)
         
         self.lblGrossProfit = QLabel("GROSS PROFIT: 0.00 £")
         self.lblNetProfit = QLabel("NET PROFIT (after cash expenses): 0.00 £")
@@ -239,7 +249,6 @@ class FrmGarden(QMainWindow):
         profit_results_layout.addWidget(self.lblGrossProfit)
         profit_results_layout.addWidget(self.lblNetProfit)
         profit_results_layout.addWidget(self.lblProfitMargin)
-        profit_results.setLayout(profit_results_layout)
         results_layout.addWidget(profit_results)
         
         # Data table
@@ -248,31 +257,74 @@ class FrmGarden(QMainWindow):
         self.DGZoznam.setHorizontalHeaderLabels(["Date", "Client", "Cash", "Check", "Bank", "Expenses", "Cost", "Cash Exp"])
         self.DGZoznam.cellClicked.connect(self.DGZoznam_CellClick)
         self.DGZoznam.cellDoubleClicked.connect(self.DGZoznam_CellContentDoubleClick)
+
+        self.last_sorted_column = None  # Uloženie posledného zoradeného stĺpca
+        self.sort_order = Qt.SortOrder.AscendingOrder  # Predvolený
+        # Pripojenie eventu na kliknutie na hlavičku stĺpca
+        header = self.DGZoznam.horizontalHeader()
+        header.sectionClicked.connect(self.handle_header_click)
+
+        # self.DGZoznam.horizontalHeader().sectionClicked.connect(self.handle_header_click)
         
         results_layout.addWidget(self.DGZoznam)
-        results_group.setLayout(results_layout)
+        # results_group.setLayout(results_layout)
         right_layout.addWidget(results_group)
-        right_panel.setLayout(right_layout)
+        # right_panel.setLayout(right_layout)
         content_layout.addWidget(right_panel)
         
-        content_widget.setLayout(content_layout)
-        main_layout.addWidget(content_widget)
-        
-        main_widget.setLayout(main_layout)
-        self.setCentralWidget(main_widget)
-        
-    # def setup_initial_data(self):
-    #     # Determine correct year based on current month
-    #     current_date = QDate.currentDate()
-    #     year = current_date.year()
-    #     month = current_date.month()
+        self.main_layout.addWidget(content_widget)
 
-    #     correct_year = year if month > 4 else year - 1
+        # Označíme, že tabuľka je inicializovaná
+        self.table_initialized = True
 
-    #     # Set the correct year and load database
-    #     self.cbRok.setCurrentText(str(correct_year))
-    #     self.NacitajDatabazu()   
-    # 
+        # Nastavte tučné písmo pre výsledkové QLabel widgety
+        self.nastav_tucne_pismo_pre_vysledky()
+
+    def handle_header_click(self, column):
+        """Spracovanie kliknutia na hlavičku stĺpca."""
+        if self.last_sorted_column == column:
+            # Ak je to ten istý stĺpec, zmeň smer zoradenia
+            self.sort_order = Qt.SortOrder.DescendingOrder if self.sort_order == Qt.SortOrder.AscendingOrder else Qt.SortOrder.AscendingOrder
+        else:
+            # Ak je to nový stĺpec, začni s vzostupným zoradením
+            self.sort_order = Qt.SortOrder.AscendingOrder
+
+        # Nastavenie číselných hodnôt pre zoradenie
+        for row in range(self.DGZoznam.rowCount()):
+            item = self.DGZoznam.item(row, column)
+            if item:
+                try:
+                    # Konverzia textu na float pre číselné zoradenie
+                    item.setData(Qt.ItemDataRole.EditRole, float(item.text()))
+                except ValueError:
+                    pass  # Ignorujeme nečíselné hodnoty
+
+        # Zoradenie tabuľky podľa stĺpca a smeru
+        self.DGZoznam.sortItems(column, self.sort_order)
+        
+        # Aktualizácia posledného zoradeného stĺpca
+        self.last_sorted_column = column        
+
+    # Pridajte túto metódu do triedy FrmGarden
+    def nastav_tucne_pismo_pre_vysledky(self):
+        """Nastaví tučné písmo pre všetky výsledkové QLabel widgety."""
+        bold_font = QFont()
+        bold_font.setBold(True)
+        
+        # Nastavte tučné písmo pre výsledkové QLabel widgety
+        self.lblCashResult.setFont(bold_font)
+        self.lblCheckResult.setFont(bold_font)
+        self.lblBankResult.setFont(bold_font)
+        self.lblTotalIncome.setFont(bold_font)
+        
+        self.lblExpensesResult.setFont(bold_font)
+        self.lblExpensesCashResult.setFont(bold_font)
+        self.lblTotalExpenses.setFont(bold_font)
+        
+        self.lblGrossProfit.setFont(bold_font)
+        self.lblNetProfit.setFont(bold_font)
+        self.lblProfitMargin.setFont(bold_font)        
+
     def zmen_velkost_pisma(self, velkost, ulozit_nastavenie=True):
         """Zmení veľkosť písma pre celú aplikáciu"""
         font = QFont()
@@ -297,27 +349,38 @@ class FrmGarden(QMainWindow):
         self.FullPath = "DbGarden.db"
         self.ConnectionString = f"Data Source={self.FullPath};"
         
-        # Create table if not exists for current year
-        current_year = self.cbRok.currentText()
-        if not self.check_table_exists(current_year):
-            self.create_table_if_not_exists(current_year)
+        # Získanie aktuálneho dátumu
+        current_date = QDate.currentDate()
+        year = current_date.year()
+        month = current_date.month()
+
+        # Logika pre výber správneho roku
+        self.current_year = str(year if month >= 4 else year - 1)
+
+        # Vytvorenie spojenia, ktoré budeme používať v celom programe
+        self.conn = sqlite3.connect(self.FullPath) 
+        
+        # Nastavenie aktuálneho roku v comboboxe
+        self.cbRok.setCurrentText(self.current_year)
+
+        # Vytvorenie tabuľky, ak neexistuje
+        if not self.check_table_exists(self.current_year):
+            self.create_table_if_not_exists(self.current_year)        
             
     def check_table_exists(self, year):
-        conn = sqlite3.connect(self.FullPath)
-        cursor = conn.cursor()
+        cursor = self.conn.cursor()
         
         # Query to check if table exists
         cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='TableGarden{year}';")
         result = cursor.fetchone()
         
-        conn.close()
+        # conn.close()
 
         # If fetchone() returns None, table does not exist
         return result is not None
     
     def create_table_if_not_exists(self, year):
-        conn = sqlite3.connect(self.FullPath)
-        cursor = conn.cursor()
+        cursor = self.conn.cursor()
         
         cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS TableGarden{year} (
@@ -333,19 +396,9 @@ class FrmGarden(QMainWindow):
         )
         """)
         
-        conn.commit()
-        conn.close()
+        self.conn.commit()
     
     def load_initial_data(self):
-        current_date = QDate.currentDate()
-        month = current_date.month()
-        year = current_date.year()
-        
-        if month >= 4:
-            self.cbRok.setCurrentText(str(year))
-        else:
-            self.cbRok.setCurrentText(str(year - 1))
-        
         self.cbMonths.setCurrentIndex(0)
         self.NacitajDatabazu()
     
@@ -360,14 +413,15 @@ class FrmGarden(QMainWindow):
             self.NacitajDatabazu()
     
     def DGZoznam_CellClick(self, row, column):
-        if row != -1:
-            self.DGZoznam.selectRow(row)
-            self.OznacenieRiadku = True
-            self.Riadok = int(self.DGZoznam.item(row, 0).text())
-            self.btnDelete.setEnabled(True)
-        else:
-            self.btnDelete.setEnabled(False)
-            self.OznacenieRiadku = False
+        # if row != -1:
+        #     self.DGZoznam.selectRow(row)
+        #     self.OznacenieRiadku = True
+        #     self.Riadok = int(self.DGZoznam.item(row, 0).text())
+        #     self.btnDelete.setEnabled(True)
+        # else:
+        #     self.btnDelete.setEnabled(False)
+        #     self.OznacenieRiadku = False
+        None
     
     def DGZoznam_CellContentDoubleClick(self, row, column):
         if row != -1:
@@ -389,10 +443,38 @@ class FrmGarden(QMainWindow):
         selected_date = self.Calendar.selectedDate()
         self.txtSelectDate.setText(selected_date.toString("yyyy-MM-dd"))
     
-    def cbRok_SelectedIndexChanged(self, index):
-        self.DGZoznam.clearContents()
-        self.DGZoznam.setRowCount(0)
-        self.NacitajDatabazu()
+
+
+    def reinit_table(self):
+        """Reinicializácia tabuľky, ak bola zničená"""
+        # Nájdeme starú tabuľku a odstránime ju
+        for i in reversed(range(self.main_layout.count())):
+            widget = self.main_layout.itemAt(i).widget()
+            if widget and widget.objectName() == "DGZoznam":
+                widget.deleteLater()
+        
+        # Vytvoríme novú tabuľku
+        self.DGZoznam = QTableWidget()
+        self.DGZoznam.setObjectName("DGZoznam")
+        self.DGZoznam.setColumnCount(8)
+        self.DGZoznam.setHorizontalHeaderLabels(["Date", "Client", "Cash", "Check", "Bank", "Expenses", "Cost", "Cash Exp"])
+        self.DGZoznam.cellClicked.connect(self.DGZoznam_CellClick)
+        self.DGZoznam.cellDoubleClicked.connect(self.DGZoznam_CellContentDoubleClick)
+        self.last_sorted_column = None  # Uloženie posledného zoradeného stĺpca
+        self.sort_order = Qt.SortOrder.AscendingOrder  # Predvolený
+        # Pripojenie eventu na kliknutie na hlavičku stĺpca
+        header = self.DGZoznam.horizontalHeader()
+        header.sectionClicked.connect(self.handle_header_click)
+        # Nájdeme results_layout a pridáme tabuľku späť
+        for i in range(self.main_layout.count()):
+            widget = self.main_layout.itemAt(i).widget()
+            if isinstance(widget, QGroupBox) and widget.title() == "RESULTS":
+                results_layout = widget.layout()
+                if results_layout:
+                    results_layout.addWidget(self.DGZoznam)
+                    break
+        
+        self.table_initialized = True                
     
     def txtSelectDate_TextChanged(self, text):
         self.btnPridaj.setEnabled(bool(text))
@@ -419,10 +501,40 @@ class FrmGarden(QMainWindow):
     # ============= DATABASE OPERATIONS ==============
     def NacitajDatabazu(self):
         try:
-            conn = sqlite3.connect(self.FullPath)
-            cursor = conn.cursor()
+            cursor = self.conn.cursor()
+            cursor.execute(f"SELECT * FROM TableGarden{self.current_year}")
+            rows = cursor.fetchall()
             
-            cursor.execute(f"SELECT * FROM TableGarden{self.cbRok.currentText()}")
+            self.DGZoznam.setRowCount(len(rows))
+            
+            for row_idx, row in enumerate(rows):
+                for col_idx, value in enumerate(row[1:]):  # Skip ID column
+                    numeric_columns = [2, 3, 4, 6, 7]  # Indexy stĺpcov s číselnými hodnotami
+                    if col_idx in numeric_columns:
+                    # Pre číselné hodnoty použite Qt.ItemDataRole.EditRole
+                        item = QTableWidgetItem()
+                        item.setData(Qt.ItemDataRole.EditRole, float(value) if value else 0.0)
+                    else:
+                        # Pre textové hodnoty použite štandardný zápis
+                        item = QTableWidgetItem(str(value))
+
+                    self.DGZoznam.setItem(row_idx, col_idx, item)
+            
+            # conn.close()
+            self.StatistikaVypocet()
+        except Exception as ex:
+            QMessageBox.critical(self +  'Metoda: NacitajDatabazu', "Error", str(ex))
+
+    def NacitajDatabazuPodlaMesiac(self, month_number,year):
+        try:
+            cursor = self.conn.cursor()
+            # SQL dotaz s filtrom podľa mesiaca
+            cursor.execute(f"""
+            SELECT * FROM TableGarden{year}
+            WHERE strftime('%m', Date) = ? 
+            AND strftime('%Y', Date) = ?
+            """, (f"{month_number:02d}", year))
+            
             rows = cursor.fetchall()
             
             self.DGZoznam.setRowCount(len(rows))
@@ -432,10 +544,9 @@ class FrmGarden(QMainWindow):
                     item = QTableWidgetItem(str(value))
                     self.DGZoznam.setItem(row_idx, col_idx, item)
             
-            conn.close()
             self.StatistikaVypocet()
         except Exception as ex:
-            QMessageBox.critical(self, "Error", str(ex))
+            QMessageBox.critical(self, "Error", str(ex))            
     
     def ZalozitZaznam(self):
         try:
@@ -565,38 +676,86 @@ class FrmGarden(QMainWindow):
         net_profit = total_income - total_expenses  # Same as gross in this simple model
         profit_margin = (gross_profit / total_income * 100) if total_income > 0 else 0
         
-        # Update UI
-        self.lblCashResult.setText(f"CASH: {total_cash:.2f}")
-        self.lblCheckResult.setText(f"CHECK: {total_check:.2f}")
-        self.lblBankResult.setText(f"BANK TRANSFER: {total_bank:.2f}")
-        self.lblTotalIncome.setText(f"TOTAL INCOME: {total_income:.2f}")
+        # Update UI with bold font for numeric values
+        self.update_label_with_bold(self.lblCashResult, f"CASH: <b>{total_cash:.2f} £</b>")
+        self.update_label_with_bold(self.lblCheckResult, f"CHECK: <b>{total_check:.2f} £</b>")
+        self.update_label_with_bold(self.lblBankResult, f"BANK TRANSFER: <b>{total_bank:.2f} £</b>")
+        self.update_label_with_bold(self.lblTotalIncome, f"TOTAL INCOME: <b>{total_income:.2f} £</b>")
         
-        self.lblExpensesResult.setText(f"EXPENSES: {total_expenses:.2f}")
-        self.lblExpensesCashResult.setText(f"EXPENSES CASH: {total_cash_expenses:.2f}")
-        self.lblTotalExpenses.setText(f"TOTAL EXPENSES: {total_expenses:.2f}")
+        self.update_label_with_bold(self.lblExpensesResult, f"EXPENSES: <b>{total_expenses:.2f} £</b>")
+        self.update_label_with_bold(self.lblExpensesCashResult, f"EXPENSES CASH: <b>{total_cash_expenses:.2f} £</b>")
+        self.update_label_with_bold(self.lblTotalExpenses, f"TOTAL EXPENSES: <b>{total_expenses:.2f} £</b>")
         
-        self.lblGrossProfit.setText(f"GROSS PROFIT: {gross_profit:.2f}")
-        self.lblNetProfit.setText(f"NET PROFIT: {net_profit:.2f}")
-        self.lblProfitMargin.setText(f"PROFIT MARGIN: {profit_margin:.1f}%")
+        self.update_label_with_bold(self.lblGrossProfit, f"GROSS PROFIT: <b>{gross_profit:.2f} £</b>")
+        self.update_label_with_bold(self.lblNetProfit, f"NET PROFIT: <b>{net_profit:.2f} £</b>")
+        self.update_label_with_bold(self.lblProfitMargin, f"PROFIT MARGIN: <b>{profit_margin:.1f}%</b>")
+
+    def update_label_with_bold(self, label, text):
+        """Aktualizuje QLabel s tučným písmom iba pre číselné hodnoty."""
+        parts = text.split(":")  # Rozdelíme text na časti pred a po dvojbodke.
         
-    def cbMonths_SelectedIndexChanged(self, index):
-        if not self.PrveOtvorenieMesiace:
-            self.gbResult.setTitle(f"RESULT OF MONTH: {self.cbMonths.currentText()}")
+        if len(parts) == 2:
+            bold_font = QFont()
+            bold_font.setBold(True)
             
-            if self.cbMonths.currentText() != "All":
+            normal_font = QFont()
+            normal_font.setBold(False)
+            
+            label.setText(f"{parts[0]}:  <b>{parts[1].strip()}</b>")
+            label.setFont(normal_font)  # Nastavíme normálne písmo pre celý text. 
+
+    def cbMonths_SelectedIndexChanged(self, index):
+        try:
+            selected_month = self.cbMonths.currentText()
+
+            # Aktualizácia názvu skupiny výsledkov
+            if selected_month == "All":
+                self.results_group.setTitle("RESULTS")
+            else:
+                self.results_group.setTitle(f"RESULTS FOR: {selected_month}")
+            
+            if selected_month != "All":
                 try:
-                    yYear = int(self.cbRok.currentText())
-                    mMonth = self.Mesiace(self.cbMonths.currentText())
+                    #year = int(self.cbRok.currentText())
+                    month_index = self.cbMonths.currentIndex()
                     
-                    # TODO: Implement filtering logic here
-                    # This would need to be adapted to work with QTableWidget
-                    
-                    self.StatistikaVypocet()
+                    # Ak je vybraný konkrétny mesiac (nie "All")
+                    if month_index > 0:  # "All" je index 0
+                        month_number = month_index  # január = 1, február = 2, atď.
+                        selected_year = self.cbRok.currentText()
+                        # Načítanie dát pre konkrétny mesiac
+                        self.NacitajDatabazuPodlaMesiac(month_number,selected_year)
                 except Exception as ex:
                     QMessageBox.critical(self, "Error", str(ex))
             else:
+                # Ak je vybrané "All", načítaj všetky dáta
                 self.NacitajDatabazu()
-                self.StatistikaVypocet()
+        except Exception as ex:
+            QMessageBox.critical(self, "Error", f"Chyba pri zmene mesiaca: {str(ex)}")
+
+    def cbRok_SelectedIndexChanged(self, index):
+      if hasattr(self, 'DGZoznam') and self.table_initialized:
+        try:   
+            # Nastavíme mesiac na "All"
+            self.cbMonths.setCurrentIndex(0)
+
+            # Aktualizujeme current_year podľa výberu v comboboxe
+            self.current_year = self.cbRok.currentText()
+
+            # Skontrolujeme existenciu tabuľky pre nový rok
+            if not self.check_table_exists(self.current_year):
+                self.create_table_if_not_exists(self.current_year)
+
+            self.DGZoznam.clearContents()
+            self.DGZoznam.setRowCount(0)
+            self.NacitajDatabazu()
+            
+            # Aktualizujeme názov výsledkovej skupiny
+            self.results_group.setTitle(f"RESULTS FOR YEAR: {self.current_year}") 
+        except RuntimeError:
+            # Obnovíme tabuľku, ak bola zničená
+            self.reinit_table()
+            self.NacitajDatabazu()            
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
