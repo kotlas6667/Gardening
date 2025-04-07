@@ -1,4 +1,4 @@
-from Config import NAZOV_APP, NAZOV_FIRMY,HEIGHT,WIDTH,X_POSITION,Y_POSITION
+from Config import NAZOV_APP, NAZOV_FIRMY,HEIGHT,WIDTH,X_POSITION,Y_POSITION,TABLES_2025_MORE,TABLES_2025_LESS
 import sys
 import os
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
@@ -255,38 +255,44 @@ class FrmGarden(QMainWindow):
         expense_results_layout = QVBoxLayout(expense_results)
         
         self.lblExpensesResult = QLabel("EXPENSES: 0.00 £")
-        self.lblExpensesCashResult = QLabel("EXPENSES CASH: 0.00 £")
-        self.lblTotalExpenses = QLabel("TOTAL EXPENSES: 0.00 £")
+        # self.lblExpensesCashResult = QLabel("EXPENSES CASH: 0.00 £")
         self.lblStaffCost = QLabel("STAFF COST: 0.00 £")  # Nový QLabel pre StaffCost
+        self.lblTotalExpenses = QLabel("TOTAL EXPENSES: 0.00 £")
+        
         
         expense_results_layout.addWidget(self.lblExpensesResult)
-        expense_results_layout.addWidget(self.lblExpensesCashResult)
-        expense_results_layout.addWidget(self.lblTotalExpenses)
+        # expense_results_layout.addWidget(self.lblExpensesCashResult)
         results_layout.addWidget(expense_results)
         expense_results_layout.addWidget(self.lblStaffCost)  # Pridanie StaffCost 
+        expense_results_layout.addWidget(self.lblTotalExpenses)        
         
         # Profit results
         profit_results = QGroupBox("PROFIT ANALYSIS")
         profit_results_layout = QVBoxLayout(profit_results)
         
         self.lblGrossProfit = QLabel("GROSS PROFIT: 0.00 £")
-        self.lblNetProfit = QLabel("NET PROFIT (after cash expenses): 0.00 £")
+        # self.lblTotalExpenses = QLabel("STAFF and EXPENSES: 0.00 £")
         self.lblProfitMargin = QLabel("PROFIT MARGIN: 0%")
         
         # Nastavenie tooltipov pre každý riadok
-        self.lblGrossProfit.setToolTip("Celkový zisk pred odpočítaním nákladov.")
-        self.lblNetProfit.setToolTip("Čistý zisk po odpočítaní všetkých nákladov.")
+        self.lblGrossProfit.setToolTip("Celkový zisk pred odpočítaním nákladov. (TOTAL INCOME - EXPENSES - STAFF COST)")
+        self.lblTotalExpenses.setToolTip("Spočítanie Staff cost + Expenses.")
         self.lblProfitMargin.setToolTip("Percentuálny podiel zisku na celkových príjmoch.")
 
         profit_results_layout.addWidget(self.lblGrossProfit)
-        profit_results_layout.addWidget(self.lblNetProfit)
+        # profit_results_layout.addWidget(self.lblTotalExpenses)
         profit_results_layout.addWidget(self.lblProfitMargin)
         results_layout.addWidget(profit_results)
         
         # Data table
         self.DGZoznam = QTableWidget()
         self.DGZoznam.setColumnCount(9)
-        self.DGZoznam.setHorizontalHeaderLabels(["Date", "Client", "Cash", "Check", "Bank", "ExpensesDesc", "ExpCost","StaffCost", "StaffName"])
+        
+        if self.cbRok.currentText() >= '2025':
+            self.DGZoznam.setHorizontalHeaderLabels(TABLES_2025_MORE)
+        else:
+            self.DGZoznam.setHorizontalHeaderLabels(TABLES_2025_LESS)
+        
         self.DGZoznam.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.DGZoznam.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.DGZoznam.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -353,11 +359,11 @@ class FrmGarden(QMainWindow):
         self.lblTotalIncome.setFont(bold_font)
         
         self.lblExpensesResult.setFont(bold_font)
-        self.lblExpensesCashResult.setFont(bold_font)
-        self.lblTotalExpenses.setFont(bold_font)
+        # self.lblExpensesCashResult.setFont(bold_font)
+        # self.lblTotalExpenses.setFont(bold_font)
         
         self.lblGrossProfit.setFont(bold_font)
-        self.lblNetProfit.setFont(bold_font)
+        self.lblTotalExpenses.setFont(bold_font)
         self.lblProfitMargin.setFont(bold_font) 
         
         # Nastavte tučné písmo pre všetky textové polia
@@ -507,7 +513,12 @@ class FrmGarden(QMainWindow):
         self.DGZoznam = QTableWidget()
         self.DGZoznam.setObjectName("DGZoznam")
         self.DGZoznam.setColumnCount(9)
-        self.DGZoznam.setHorizontalHeaderLabels(["Date", "Client", "Cash", "Check", "Bank", "ExpensesDesc", "ExpCost","StaffCash", "StaffName"])
+        
+        if self.current_year >= '2025':
+            self.DGZoznam.setHorizontalHeaderLabels(TABLES_2025_MORE)
+        else:
+            self.DGZoznam.setHorizontalHeaderLabels(TABLES_2025_LESS)
+        
         self.DGZoznam.cellClicked.connect(self.DGZoznam_CellClick)
         self.DGZoznam.cellDoubleClicked.connect(self.DGZoznam_CellContentDoubleClick)
         self.last_sorted_column = None  # Uloženie posledného zoradeného stĺpca
@@ -773,9 +784,10 @@ class FrmGarden(QMainWindow):
             
             # Calculate totals
             total_income = total_cash + total_check + total_bank
-            gross_profit = total_income - total_expenses
-            net_profit = total_income - total_expenses  # Same as gross in this simple model
+            gross_profit = total_income - total_expenses - staff_cost
+            total_expenses = total_expenses  
             profit_margin = (gross_profit / (total_cash + total_check + total_bank) * 100) if (total_cash + total_check + total_bank) > 0 else 0
+            total_expenses_staff = total_expenses + staff_cost
             
             # Update UI with bold font for numeric values
             formatted_cash = self.format_number_with_spaces(total_cash)
@@ -793,8 +805,8 @@ class FrmGarden(QMainWindow):
             formatted_expenses = self.format_number_with_spaces(total_expenses)
             self.update_label_with_bold(self.lblExpensesResult, f"EXPENSES: <b>{formatted_expenses} £</b>")
 
-            formatted_cash_expenses = self.format_number_with_spaces(total_cash_expenses)
-            self.update_label_with_bold(self.lblExpensesCashResult, f"<s>EXPENSES CASH: <b>{formatted_cash_expenses} £</b></s>")
+            # formatted_cash_expenses = self.format_number_with_spaces(total_cash_expenses)
+            # self.update_label_with_bold(self.lblExpensesCashResult, f"<s>EXPENSES CASH: <b>{formatted_cash_expenses} £</b></s>")
 
             formatted_staff_cost = self.format_number_with_spaces(staff_cost)
             self.lblStaffCost.setText(f"STAFF COST: <b>{formatted_staff_cost} £</b>")
@@ -802,8 +814,8 @@ class FrmGarden(QMainWindow):
             formatted_gross_profit = self.format_number_with_spaces(gross_profit)
             self.update_label_with_bold(self.lblGrossProfit, f"GROSS PROFIT: <b>{formatted_gross_profit} £</b>")
 
-            formatted_net_profit = self.format_number_with_spaces(net_profit)
-            self.update_label_with_bold(self.lblNetProfit, f"NET PROFIT: <b>{formatted_net_profit} £</b>")
+            formatted_total_expenses_staff = self.format_number_with_spaces(total_expenses_staff)
+            self.update_label_with_bold(self.lblTotalExpenses, f"TOTAL EXPENSES: <b>{formatted_total_expenses_staff} £</b>")
 
             formatted_profit_margin = self.format_number_with_spaces(profit_margin)
             self.update_label_with_bold(self.lblProfitMargin, f"PROFIT MARGIN: <b>{formatted_profit_margin}%</b>")
@@ -873,6 +885,11 @@ class FrmGarden(QMainWindow):
             # Skontrolujeme existenciu tabuľky pre nový rok
             if not self.check_table_exists(self.current_year):
                 self.create_table_if_not_exists(self.current_year)
+
+            if self.current_year >= '2025':
+                self.DGZoznam.setHorizontalHeaderLabels(TABLES_2025_MORE)
+            else:
+                self.DGZoznam.setHorizontalHeaderLabels(TABLES_2025_LESS)
 
             self.DGZoznam.clearContents()
             self.DGZoznam.setRowCount(0)
