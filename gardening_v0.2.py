@@ -10,10 +10,14 @@ from PyQt6.QtGui import QFont, QAction
 import sqlite3
 import openpyxl
 from openpyxl import Workbook
+import locale
 
 class FrmGarden(QMainWindow):
     def __init__(self):
         super().__init__()
+        
+        # Nastavte locale pre formátovanie (môžete si vybrať podľa potreby)
+        locale.setlocale(locale.LC_NUMERIC, 'en_US.UTF-8')
 
         self.setWindowTitle(NAZOV_APP)
         self.setGeometry(X_POSITION, Y_POSITION, WIDTH, HEIGHT)
@@ -774,35 +778,59 @@ class FrmGarden(QMainWindow):
             profit_margin = (gross_profit / (total_cash + total_check + total_bank) * 100) if (total_cash + total_check + total_bank) > 0 else 0
             
             # Update UI with bold font for numeric values
-            self.update_label_with_bold(self.lblCashResult, f"CASH: <b>{total_cash:.2f} £</b>")
-            self.update_label_with_bold(self.lblCheckResult, f"CHECK: <b>{total_check:.2f} £</b>")
-            self.update_label_with_bold(self.lblBankResult, f"BANK TRANSFER: <b>{total_bank:.2f} £</b>")
-            self.update_label_with_bold(self.lblTotalIncome, f"TOTAL INCOME: <b>{total_income:.2f} £</b>")
+            formatted_cash = self.format_number_with_spaces(total_cash)
+            self.update_label_with_bold(self.lblCashResult, f"CASH: <b>{formatted_cash} £</b>")
+
+            formatted_check = self.format_number_with_spaces(total_check)
+            self.update_label_with_bold(self.lblCheckResult, f"CHECK: <b>{formatted_check} £</b>")
+
+            formatted_bank = self.format_number_with_spaces(total_bank)
+            self.update_label_with_bold(self.lblBankResult, f"BANK TRANSFER: <b>{formatted_bank} £</b>")
+
+            formatted_income = self.format_number_with_spaces(total_income)
+            self.update_label_with_bold(self.lblTotalIncome, f"TOTAL INCOME: <b>{formatted_income} £</b>")
+
+            formatted_expenses = self.format_number_with_spaces(total_expenses)
+            self.update_label_with_bold(self.lblExpensesResult, f"EXPENSES: <b>{formatted_expenses} £</b>")
+
+            formatted_cash_expenses = self.format_number_with_spaces(total_cash_expenses)
+            self.update_label_with_bold(self.lblExpensesCashResult, f"<s>EXPENSES CASH: <b>{formatted_cash_expenses} £</b></s>")
+
+            formatted_staff_cost = self.format_number_with_spaces(staff_cost)
+            self.lblStaffCost.setText(f"STAFF COST: <b>{formatted_staff_cost} £</b>")
+
+            formatted_gross_profit = self.format_number_with_spaces(gross_profit)
+            self.update_label_with_bold(self.lblGrossProfit, f"GROSS PROFIT: <b>{formatted_gross_profit} £</b>")
+
+            formatted_net_profit = self.format_number_with_spaces(net_profit)
+            self.update_label_with_bold(self.lblNetProfit, f"NET PROFIT: <b>{formatted_net_profit} £</b>")
+
+            formatted_profit_margin = self.format_number_with_spaces(profit_margin)
+            self.update_label_with_bold(self.lblProfitMargin, f"PROFIT MARGIN: <b>{formatted_profit_margin}%</b>")
             
-            self.update_label_with_bold(self.lblExpensesResult, f"EXPENSES: <b>{total_expenses:.2f} £</b>")
-            self.update_label_with_bold(self.lblExpensesCashResult, f"<s>EXPENSES CASH: <b>{total_cash_expenses:.2f} £</b></s>")
-            self.update_label_with_bold(self.lblTotalExpenses, f"TOTAL EXPENSES: <b>{total_expenses:.2f} £</b>")
-            self.lblStaffCost.setText(f"STAFF COST: <b>{staff_cost:.2f} £</b>")  # Aktualizácia StaffCost
-            
-            self.update_label_with_bold(self.lblGrossProfit, f"GROSS PROFIT: <b>{gross_profit:.2f} £</b>") #((total_cash + total_check + total_bank) - total_expenses)
-            self.update_label_with_bold(self.lblNetProfit, f"NET PROFIT: <b>{net_profit:.2f} £</b>") #(total_income - total_expenses)
-            self.update_label_with_bold(self.lblProfitMargin, f"PROFIT MARGIN: <b>{profit_margin:.1f}%</b>") #((gross_profit / (total_cash + total_check + total_bank) * 100))
         except Exception as ex:
             QMessageBox.critical(self, "Error", f"Chyba pri Statistike: {str(ex)}")
-
+            
+    def format_number_with_spaces(self,number):
+        """Formátuje číslo s medzerami medzi tisíckami."""
+        if number >= 1000 or number <= -1000:  # Kontrola, či je číslo tisíckové alebo vyššie
+            return f"{number:,.2f}".replace(",", " ")
+        else:
+            return f"{number:.2f}"
+        
     def update_label_with_bold(self, label, text):
         """Aktualizuje QLabel s tučným písmom iba pre číselné hodnoty."""
-        parts = text.split(":")  # Rozdelíme text na časti pred a po dvojbodke.
-        
+        parts = text.split(":") # Rozdelíme text na časti pred a po dvojbodke.
+
         if len(parts) == 2:
             bold_font = QFont()
             bold_font.setBold(True)
-            
+
             normal_font = QFont()
             normal_font.setBold(False)
-            
-            label.setText(f"{parts[0]}:  <b>{parts[1].strip()}</b>")
-            label.setFont(normal_font)  # Nastavíme normálne písmo pre celý text. 
+
+            label.setText(f"{parts[0]}: <b>{parts[1].strip()}</b>")
+            label.setFont(normal_font) # Nastavíme normálne písmo pre celý text.
 
     def cbMonths_SelectedIndexChanged(self, index):
         try:
