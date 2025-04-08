@@ -18,7 +18,7 @@ import locale
 class FrmGarden(QMainWindow):
     def __init__(self):
         super().__init__()
-        
+        # test
        # Nastavenie ikony aplikácie
         # Získanie absolútnej cesty aktuálneho adresára
         current_dir = os.path.dirname(os.path.abspath(__file__))       
