@@ -74,6 +74,9 @@ class FrmGarden(QMainWindow):
         
            # Tlačidlo pre export
         self.btnExport = QPushButton("Export")
+        export_font = self.btnExport.font()
+        export_font.setBold(True)
+        self.btnExport.setFont(export_font)
         self.btnExport.clicked.connect(self.export_to_excel)
         search_layout.addWidget(self.btnExport)
         
@@ -165,89 +168,152 @@ class FrmGarden(QMainWindow):
 
         # Date input
         date_layout = QHBoxLayout()
-        date_layout.addWidget(QLabel("Date:"))
+        date_label = QLabel("Date:")
+        font = date_label.font()
+        font.setBold(True)
+        date_label.setFont(font)
+        date_layout.addWidget(date_label)
         self.txtSelectDate = QLineEdit()
         self.txtSelectDate.setPlaceholderText("YYYY-MM-DD")
         date_layout.addWidget(self.txtSelectDate)
         input_layout.addLayout(date_layout)
 
-        # Client input
+       # Client input
         client_layout = QHBoxLayout()
-        client_layout.addWidget(QLabel("Client:"))
+
+        # Client label (bold)
+        client_label = QLabel("Client:")
+        client_font = client_label.font()
+        client_font.setBold(True)
+        client_label.setFont(client_font)
+        client_layout.addWidget(client_label)
+
         self.txtClients = QLineEdit()
         self.txtClients.setPlaceholderText("Client Name")
         client_layout.addWidget(self.txtClients)
         input_layout.addLayout(client_layout)
 
         # Income section
-        income_group = QGroupBox("INCOME")
+        income_group = QGroupBox("INCOME")  # GroupBox title is automatically bold
         income_layout = QVBoxLayout(income_group)
+
+        # CASH label (bold)
+        cash_label = QLabel("CASH:")
+        cash_font = cash_label.font()
+        cash_font.setBold(True)
+        cash_label.setFont(cash_font)
+        income_layout.addWidget(cash_label)
 
         self.txtCash = QLineEdit()
         self.txtCash.setPlaceholderText("Cash")
-        income_layout.addWidget(QLabel("CASH:"))
         income_layout.addWidget(self.txtCash)
+
+        # CHECK label (bold)
+        check_label = QLabel("CHECK:")
+        check_font = check_label.font()
+        check_font.setBold(True)
+        check_label.setFont(check_font)
+        income_layout.addWidget(check_label)
 
         self.txtCheck = QLineEdit()
         self.txtCheck.setPlaceholderText("Check")
-        income_layout.addWidget(QLabel("CHECK:"))
         income_layout.addWidget(self.txtCheck)
+
+        # BANK TRANSFER label (bold)
+        bank_label = QLabel("BANK TRANSFER:")
+        bank_font = bank_label.font()
+        bank_font.setBold(True)
+        bank_label.setFont(bank_font)
+        income_layout.addWidget(bank_label)
 
         self.txtBank = QLineEdit()
         self.txtBank.setPlaceholderText("Bank Transfer")
-        income_layout.addWidget(QLabel("BANK TRANSFER:"))
         income_layout.addWidget(self.txtBank)
 
         input_layout.addWidget(income_group)
 
         # Expenses section
-        expenses_group = QGroupBox("EXPENSE")
+        expenses_group = QGroupBox("EXPENSE")  # GroupBox title is automatically bold
         expenses_layout = QHBoxLayout(expenses_group)
 
-        # Ľavá strana - EXPENSES a COST
+        # Left side - EXPENSES and COST
         left_expenses = QVBoxLayout()
+
+        # EXPENSES DESC label (bold)
+        expenses_desc_label = QLabel("EXPENSES DESC:")
+        expenses_desc_font = expenses_desc_label.font()
+        expenses_desc_font.setBold(True)
+        expenses_desc_label.setFont(expenses_desc_font)
+        left_expenses.addWidget(expenses_desc_label)
+
         self.txtExpenses = QLineEdit()
         self.txtExpenses.setPlaceholderText("Expenses Description")
+        left_expenses.addWidget(self.txtExpenses)
+
+        # COST COMPLETE label (bold)
+        cost_label = QLabel("COST COMPLETE:")
+        cost_font = cost_label.font()
+        cost_font.setBold(True)
+        cost_label.setFont(cost_font)
+        left_expenses.addWidget(cost_label)
+
         self.txtExpensesCost = QLineEdit()
         self.txtExpensesCost.setPlaceholderText("Cost of Expenses")
-
-        left_expenses.addWidget(QLabel("EXPENSES DESC:"))
-        left_expenses.addWidget(self.txtExpenses)
-        left_expenses.addWidget(QLabel("COST COMPLETE:"))
         left_expenses.addWidget(self.txtExpensesCost)
 
-        # Pravá strana - EXPENSES CASH a CASH FOR STAFF
+        # Right side - CASH FOR STAFF and EXPENSES CASH
         right_expenses = QVBoxLayout()
+
+        # CASH FOR STAFF label (bold)
+        cash_staff_label = QLabel("CASH FOR STAFF:")
+        cash_staff_font = cash_staff_label.font()
+        cash_staff_font.setBold(True)
+        cash_staff_label.setFont(cash_staff_font)
+        right_expenses.addWidget(cash_staff_label)
+
         self.txtCashForStaff = QLineEdit()
         self.txtCashForStaff.setPlaceholderText("Cash for staff")
+        right_expenses.addWidget(self.txtCashForStaff)
+
+        # EXPENSES CASH label (bold)
+        expenses_cash_label = QLabel("EXPENSES CASH:")
+        expenses_cash_font = expenses_cash_label.font()
+        expenses_cash_font.setBold(True)
+        expenses_cash_label.setFont(expenses_cash_font)
+        right_expenses.addWidget(expenses_cash_label)
 
         self.txtCashForStaffName = QLineEdit()
         self.txtCashForStaffName.setPlaceholderText("Staff name")
-
-        right_expenses.addWidget(QLabel("CASH FOR STAFF:"))
         right_expenses.addWidget(self.txtCashForStaffName)
-        right_expenses.addWidget(QLabel("EXPENSES CASH:"))
-        right_expenses.addWidget(self.txtCashForStaff)
 
         expenses_layout.addLayout(left_expenses)
         expenses_layout.addLayout(right_expenses)
         input_layout.addWidget(expenses_group)
 
-        # Buttons
+       # Buttons
         buttons_layout = QHBoxLayout()
 
+        # Add button (bold)
         self.btnPridaj = QPushButton("Add")
+        btn_font = self.btnPridaj.font()
+        btn_font.setBold(True)
+        self.btnPridaj.setFont(btn_font)
         self.btnPridaj.setEnabled(True)
         self.btnPridaj.clicked.connect(self.btnPridaj_Click)
 
+        # Edit button (bold)
         self.btnEdit = QPushButton("Edit")
+        self.btnEdit.setFont(btn_font)  # Reuse the same bold font
         self.btnEdit.setEnabled(False)
         self.btnEdit.clicked.connect(self.btnEdit_Click)
 
+        # Delete button (bold)
         self.btnDelete = QPushButton("Delete")
+        self.btnDelete.setFont(btn_font)  # Reuse the same bold font
         self.btnDelete.setEnabled(False)
         self.btnDelete.clicked.connect(self.btnDelete_Click)
 
+        # Add buttons to layout
         buttons_layout.addWidget(self.btnPridaj)
         buttons_layout.addWidget(self.btnEdit)
         buttons_layout.addWidget(self.btnDelete)
@@ -914,6 +980,8 @@ class FrmGarden(QMainWindow):
     def cbRok_SelectedIndexChanged(self, index):
            if hasattr(self, 'DGZoznam') and self.table_initialized:
             try:   
+                #vymaz vsetky txtboxe
+                self.MazanietxtPopridaniDoSql()
                 # Nastavíme mesiac na "All"
                 self.cbMonths.setCurrentIndex(0)
 
