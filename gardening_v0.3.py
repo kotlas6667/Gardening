@@ -13,12 +13,12 @@ import openpyxl
 from openpyxl import Workbook
 import locale
 
-#######################  toto daj do konzole:   pyinstaller --onefile --windowed --icon=ikona.ico gardening_v0.3.py   #################
+#######################  toto daj do konzole:   pyinstaller --onefile --windowed --icon=ikona.ico gardening_v0.3.py   #################   
 
 class FrmGarden(QMainWindow):
     def __init__(self):
         super().__init__()
-        
+        # test
        # Nastavenie ikony aplikácie
         # Získanie absolútnej cesty aktuálneho adresára
         current_dir = os.path.dirname(os.path.abspath(__file__))       
