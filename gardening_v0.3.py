@@ -74,6 +74,23 @@ class FrmGarden(QMainWindow):
         
            # Tlačidlo pre export
         self.btnExport = QPushButton("Export")
+
+                # Add button (bold)
+        buttons_style = """
+                        QPushButton {
+                            font-weight: bold;
+                            font-size: 14px;
+                            padding: 8px 15px;
+                            min-width: 80px;
+                            min-height: 15px;
+                            border: 1px solid #ccc;
+                            border-radius: 4px;
+                        }
+                        QPushButton:hover {
+                            background-color: #f0f0f0;
+                        }
+                    """
+        self.btnExport.setStyleSheet(buttons_style)
         export_font = self.btnExport.font()
         export_font.setBold(True)
         self.btnExport.setFont(export_font)
@@ -114,12 +131,14 @@ class FrmGarden(QMainWindow):
         self.start_date_edit = QDateEdit()
         self.start_date_edit.setCalendarPopup(True)
         self.start_date_edit.setDate(QDate.currentDate().addMonths(-12))
+        self.start_date_edit.dateChanged.connect(self.reload_data_based_on_dates)  # <-- Nové
         search_layout.addWidget(QLabel("Date from:"))
         search_layout.addWidget(self.start_date_edit)
 
         self.end_date_edit = QDateEdit()
         self.end_date_edit.setCalendarPopup(True)
         self.end_date_edit.setDate(QDate.currentDate())
+        self.end_date_edit.dateChanged.connect(self.reload_data_based_on_dates)  # <-- Nové
         search_layout.addWidget(QLabel("Date to:"))
         search_layout.addWidget(self.end_date_edit)
 
@@ -175,6 +194,7 @@ class FrmGarden(QMainWindow):
         date_layout.addWidget(date_label)
         self.txtSelectDate = QLineEdit()
         self.txtSelectDate.setPlaceholderText("YYYY-MM-DD")
+        
         date_layout.addWidget(self.txtSelectDate)
         input_layout.addLayout(date_layout)
 
@@ -294,6 +314,20 @@ class FrmGarden(QMainWindow):
         buttons_layout = QHBoxLayout()
 
         # Add button (bold)
+        buttons_style = """
+                        QPushButton {
+                            font-weight: bold;
+                            font-size: 14px;
+                            padding: 8px 15px;
+                            min-width: 80px;
+                            min-height: 35px;
+                            border: 1px solid #ccc;
+                            border-radius: 4px;
+                        }
+                        QPushButton:hover {
+                            background-color: #f0f0f0;
+                        }
+                    """
         self.btnPridaj = QPushButton("Add")
         btn_font = self.btnPridaj.font()
         btn_font.setBold(True)
@@ -312,6 +346,11 @@ class FrmGarden(QMainWindow):
         self.btnDelete.setFont(btn_font)  # Reuse the same bold font
         self.btnDelete.setEnabled(False)
         self.btnDelete.clicked.connect(self.btnDelete_Click)
+
+        #pridaj style
+        self.btnPridaj.setStyleSheet(buttons_style)
+        self.btnEdit.setStyleSheet(buttons_style)
+        self.btnDelete.setStyleSheet(buttons_style)
 
         # Add buttons to layout
         buttons_layout.addWidget(self.btnPridaj)
@@ -376,19 +415,39 @@ class FrmGarden(QMainWindow):
 
         # Data table
         self.DGZoznam = QTableWidget()
+        self.DGZoznam.setAlternatingRowColors(True)
+        self.DGZoznam.setStyleSheet("""
+            QTableWidget {
+                alternate-background-color: #f7f7f7;
+                background-color: white;
+            }
+            QTableWidget::item {
+                padding: 5px;  /* Odsadenie textu v bunkách */
+            }
+        """)
         self.DGZoznam.setColumnCount(9)
 
         if self.cbRok.currentText() >= '2025':
             self.DGZoznam.setHorizontalHeaderLabels(TABLES_2025_MORE)
         else:
             self.DGZoznam.setHorizontalHeaderLabels(TABLES_2025_LESS)
-
+        
+        # Nastavenie tučnej hlavičky
+        header = self.DGZoznam.horizontalHeader()
+        header.setStyleSheet("""
+            QHeaderView::section {
+                font-weight: bold;
+                background-color: #e0e0e0;
+                padding: 5px;
+            }
+        """)
+        self.DGZoznam.horizontalHeader().setHighlightSections(True)
         self.DGZoznam.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.DGZoznam.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.DGZoznam.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.DGZoznam.cellClicked.connect(self.DGZoznam_CellClick)
         self.DGZoznam.cellDoubleClicked.connect(self.DGZoznam_CellContentDoubleClick)
-
+        self.DGZoznam.horizontalHeader().setSortIndicatorShown(True)  # Zobrazí šípku
         self.last_sorted_column = None  # Uloženie posledného zoradeného stĺpca
         self.sort_order = Qt.SortOrder.AscendingOrder  # Predvolený
         header = self.DGZoznam.horizontalHeader()
@@ -405,6 +464,15 @@ class FrmGarden(QMainWindow):
 
         # Nastavte tučné písmo pre výsledkové QLabel widgety
         self.nastav_tucne_pismo_pre_vysledky_textboxe()
+
+    def reload_data_based_on_dates(self):
+        """Načíta dáta podľa aktuálneho rozsahu dátumov"""
+        self.advanced_search()
+        # start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
+        # end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
+        
+        # Volanie existujúcej metódy pre načítanie dát (upravte podľa potreby)
+        # self.NacitajDatabazuPodlaDatumu(start_date, end_date)
         
     def export_to_excel(self):
         try:
@@ -464,6 +532,7 @@ class FrmGarden(QMainWindow):
             
     def NacitajDatabazuPodlaMesiac(self, month_number,year):
         try:
+            self.txtSearch.clear()
             cursor = self.conn.cursor()
             # SQL dotaz s filtrom podľa mesiaca
             cursor.execute(f"""
@@ -488,6 +557,7 @@ class FrmGarden(QMainWindow):
     def advanced_search(self):
         try:
             if self.txtSearch.text() != '':
+                self.MazanietxtPopridaniDoSql()
                 column_name = self.cbColumns.currentText()  # Získajte vybraný názov stĺpca
                 search_text = self.txtSearch.text().strip()  # Získajte vyhľadávací text
                 start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
@@ -643,16 +713,18 @@ class FrmGarden(QMainWindow):
             self.NacitajDatabazu()
 
     def DGZoznam_CellClick(self, row, column):
-        if row != -1:
-            self.Riadok = self.row_ids[row]
-            self.btnDelete.setEnabled(True)
-        else:
-            self.btnDelete.setEnabled(False)
+        # if row != -1:
+        #     self.Riadok = self.row_ids[row]
+        #     self.btnDelete.setEnabled(True)
+        # else:
+        #     self.btnDelete.setEnabled(False)
+        None
 
     def DGZoznam_CellContentDoubleClick(self, row, column):
         self.Riadok = self.row_ids[row]
         if row != -1:
             self.MazanietxtPopridaniDoSql()
+            self.txtSearch.clear()
 
             self.txtSelectDate.setText(self.DGZoznam.item(row, 0).text())
             self.txtClients.setText(self.DGZoznam.item(row, 1).text())
@@ -683,6 +755,7 @@ class FrmGarden(QMainWindow):
 
         # Vytvoríme novú tabuľku
         self.DGZoznam = QTableWidget()
+        
         self.DGZoznam.setObjectName("DGZoznam")
         self.DGZoznam.setColumnCount(9)
 
@@ -712,7 +785,7 @@ class FrmGarden(QMainWindow):
     def btnPridaj_Click(self):
         if self.txtClients.text() and self.txtSelectDate.text():
             reply = QMessageBox.question(self, 'Add Record',
-                                        f"Add this record?",
+                                        f"Add this record for the fiscal year {self.current_year}?",
                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
 
             if reply == QMessageBox.StandardButton.Yes:
@@ -830,7 +903,7 @@ class FrmGarden(QMainWindow):
             cursor.execute(sql, values)
             self.conn.commit()
 
-            QMessageBox.information(self, "Success", "Record added")
+            # QMessageBox.information(self, "Success", "Record added")
             self.MazanietxtPopridaniDoSql()
         except Exception as ex:
             QMessageBox.critical(self, "Error", str(ex))
@@ -862,7 +935,7 @@ class FrmGarden(QMainWindow):
             cursor.execute(sql, values)
             self.conn.commit()
 
-            QMessageBox.information(self, "Success", "Record updated")
+            # QMessageBox.information(self, "Success", "Record updated")
         except Exception as ex:
             QMessageBox.critical(self, "Error", str(ex))
 
@@ -875,7 +948,7 @@ class FrmGarden(QMainWindow):
 
             self.conn.commit()
 
-            QMessageBox.information(self, "Success", "Record deleted")
+            # QMessageBox.information(self, "Success", "Record deleted")
             self.MazanietxtPopridaniDoSql()
 
         except Exception as ex:
@@ -891,7 +964,7 @@ class FrmGarden(QMainWindow):
         self.txtExpensesCost.clear()
         self.txtCashForStaff.clear()
         self.txtCashForStaffName.clear()
-        self.txtSearch.clear()
+        #self.txtSearch.clear()
         self.btnDelete.setEnabled(False)
         self.btnEdit.setEnabled(False)
         self.btnPridaj.setEnabled(True)
