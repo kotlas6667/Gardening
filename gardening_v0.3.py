@@ -75,7 +75,8 @@ class FrmGarden(QMainWindow):
            # Tlačidlo pre export
         self.btnExport = QPushButton("Export")
 
-                # Add button (bold)
+                # Add button (bold) tu
+
         buttons_style = """
                         QPushButton {
                             font-weight: bold;
