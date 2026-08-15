@@ -782,8 +782,8 @@ class FrmGarden(QMainWindow):
 
         exp_row2 = QHBoxLayout()
         exp_row2.setSpacing(8)
-        self.txtCashForStaff = self._make_field("Cash for staff", "0.00", exp_row2)
         self.txtCashForStaffName = self._make_field("Staff name", "Name", exp_row2)
+        self.txtCashForStaff = self._make_field("Cash for staff", "0.00", exp_row2)
         form_layout.addLayout(exp_row2)
 
         buttons_layout = QHBoxLayout()
