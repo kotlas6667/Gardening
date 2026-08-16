@@ -710,7 +710,8 @@ class FrmGarden(QMainWindow):
         self.start_date_edit = QDateEdit()
         self.start_date_edit.setCalendarPopup(True)
         self.start_date_edit.setDisplayFormat(DATE_UI)
-        self.start_date_edit.setDate(QDate.currentDate().addMonths(-12))
+        # Predvolene vždy 6.4. aktuálneho kalendárneho roka
+        self.start_date_edit.setDate(QDate(QDate.currentDate().year(), 4, 6))
         self.start_date_edit.dateChanged.connect(self.reload_data_based_on_dates)
         search_layout.addWidget(self.start_date_edit)
 
