@@ -687,11 +687,21 @@ class FrmGarden(QMainWindow):
         self.txtSearch.setPlaceholderText("Search text…")
         self.txtSearch.returnPressed.connect(self.advanced_search)
         self._search_completer_model = QStringListModel([], self)
-        self._search_completer = QCompleter(self._search_completer_model, self)
+        self._search_completer = QCompleter(self._search_completer_model, self.txtSearch)
         self._search_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self._search_completer.setFilterMode(Qt.MatchFlag.MatchContains)
         self._search_completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self._search_completer.setMaxVisibleItems(12)
+        self._search_completer.setCompletionRole(Qt.ItemDataRole.DisplayRole)
+        popup = self._search_completer.popup()
+        popup.setStyleSheet(
+            "QListView { background: #ffffff; color: #1f2d26; border: 1px solid #c5d6c9;"
+            " outline: 0; padding: 2px; }"
+            "QListView::item { padding: 6px 10px; }"
+            "QListView::item:selected { background: #d8eee1; color: #1b4332; }"
+        )
         self.txtSearch.setCompleter(self._search_completer)
+        self.txtSearch.textEdited.connect(self._on_search_text_edited)
         search_layout.addWidget(self.txtSearch, 1)
 
         from_lbl = QLabel("From")
@@ -1612,32 +1622,30 @@ class FrmGarden(QMainWindow):
         return self._resolve_search_column_for_year(combo_label, self.current_year)
 
     def _distinct_values_for_search_column(self, combo_label):
-        """Návrhy do search textboxu z DB podľa From/To (nie podľa rolety Year)."""
+        """Návrhy do search textboxu z DB podľa From/To rokov (nie podľa rolety Year)."""
         start_q = self.start_date_edit.date()
         end_q = self.end_date_edit.date()
         years = self._fiscal_years_for_date_range(start_q, end_q)
         if not years:
+            # fallback: aspoň aktuálne otvorená tabuľka v dataview
+            years = [self.current_year] if self.check_table_exists(self.current_year) else []
+        if not years:
             return []
 
-        start_date = min(start_q, end_q).toString(DATE_DB)
-        end_date = max(start_q, end_q).toString(DATE_DB)
         values = []
         seen = set()
         cursor = self.conn.cursor()
 
         for year in years:
             column_name = self._resolve_search_column_for_year(combo_label, year)
-            date_col = self._resolve_search_column_for_year("Date", year)
-            if not column_name or not date_col:
+            if not column_name:
                 continue
 
             if combo_label == "Date" or column_name.lower() == "date":
                 cursor.execute(
                     f"SELECT DISTINCT [{column_name}] FROM TableGarden{year} "
-                    f"WHERE date([{date_col}]) BETWEEN date(?) AND date(?) "
-                    f"AND [{column_name}] IS NOT NULL AND TRIM([{column_name}]) != '' "
-                    f"ORDER BY [{column_name}] DESC",
-                    (start_date, end_date),
+                    f"WHERE [{column_name}] IS NOT NULL AND TRIM([{column_name}]) != '' "
+                    f"ORDER BY [{column_name}] DESC"
                 )
                 for (raw,) in cursor.fetchall():
                     for candidate in (to_ui_date(raw), str(raw) if raw else ""):
@@ -1648,10 +1656,8 @@ class FrmGarden(QMainWindow):
             else:
                 cursor.execute(
                     f"SELECT DISTINCT CAST([{column_name}] AS TEXT) FROM TableGarden{year} "
-                    f"WHERE date([{date_col}]) BETWEEN date(?) AND date(?) "
-                    f"AND [{column_name}] IS NOT NULL AND TRIM(CAST([{column_name}] AS TEXT)) != '' "
-                    f"ORDER BY 1 COLLATE NOCASE",
-                    (start_date, end_date),
+                    f"WHERE [{column_name}] IS NOT NULL AND TRIM(CAST([{column_name}] AS TEXT)) != '' "
+                    f"ORDER BY 1 COLLATE NOCASE"
                 )
                 for (raw,) in cursor.fetchall():
                     text = str(raw).strip() if raw is not None else ""
@@ -1682,6 +1688,19 @@ class FrmGarden(QMainWindow):
                 self.txtSearch.setPlaceholderText(f"Search in {column}…")
         except Exception:
             self._search_completer_model.setStringList([])
+
+    def _on_search_text_edited(self, text):
+        """Pri písaní vždy obnov návrhy a otvor popup."""
+        if not hasattr(self, "_search_completer"):
+            return
+        if self._search_completer_model.rowCount() == 0:
+            self.update_search_completer()
+        prefix = (text or "").strip()
+        self._search_completer.setCompletionPrefix(prefix)
+        if prefix:
+            self._search_completer.complete()
+        else:
+            self._search_completer.popup().hide()
 
     def _record_field_values(self):
         return (
