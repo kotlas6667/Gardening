@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QCompleter, QAbstractItemView, QDateEdit, QSplitter, QFileDialog,
     QGraphicsDropShadowEffect, QHeaderView, QToolButton, QSpinBox, QMenu,
 )
-from PyQt6.QtCore import Qt, QDate, QSettings, QTimer
+from PyQt6.QtCore import Qt, QDate, QSettings, QTimer, QStringListModel
 from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QTextCharFormat
 import sqlite3
 import openpyxl
@@ -680,11 +680,18 @@ class FrmGarden(QMainWindow):
         ])
         self.cbColumns.setCurrentIndex(1)
         self.cbColumns.setMinimumWidth(140)
+        self.cbColumns.currentTextChanged.connect(self.update_search_completer)
         search_layout.addWidget(self.cbColumns)
 
         self.txtSearch = QLineEdit()
         self.txtSearch.setPlaceholderText("Search text…")
         self.txtSearch.returnPressed.connect(self.advanced_search)
+        self._search_completer_model = QStringListModel([], self)
+        self._search_completer = QCompleter(self._search_completer_model, self)
+        self._search_completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self._search_completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self._search_completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.txtSearch.setCompleter(self._search_completer)
         search_layout.addWidget(self.txtSearch, 1)
 
         from_lbl = QLabel("From")
@@ -983,50 +990,102 @@ class FrmGarden(QMainWindow):
     def NacitajDatabazuPodlaMesiac(self, month_number, year):
         try:
             self.txtSearch.clear()
+            date_col = self._resolve_search_column_for_year("Date", year) or "Date"
             cursor = self.conn.cursor()
             cursor.execute(
                 f"""
                 SELECT * FROM TableGarden{year}
-                WHERE strftime('%m', Date) = ?
-                AND strftime('%Y', Date) = ?
-                ORDER BY Date DESC, Id DESC
+                WHERE strftime('%m', [{date_col}]) = ?
+                AND strftime('%Y', [{date_col}]) = ?
+                ORDER BY date([{date_col}]) DESC, Id DESC
                 """,
                 (f"{month_number:02d}", year),
             )
             rows = cursor.fetchall()
-            self._fill_table_rows(rows)
+            self._fill_table_rows([(year, row) for row in rows])
             self.StatistikaVypocet()
         except Exception as ex:
             QMessageBox.critical(self, "Error", str(ex))
 
     def advanced_search(self):
+        """Vyhľadávanie podľa stĺpca + From/To. Roleta s rokmi sa tu nepoužíva."""
         try:
-            if self.txtSearch.text() != "":
+            search_text = self.txtSearch.text().strip()
+            start_q = self.start_date_edit.date()
+            end_q = self.end_date_edit.date()
+            if start_q > end_q:
+                start_q, end_q = end_q, start_q
+            start_date = start_q.toString(DATE_DB)
+            end_date = end_q.toString(DATE_DB)
+
+            if search_text:
                 self.MazanietxtPopridaniDoSql()
-                column_name = self.cbColumns.currentText()
-                search_text = self.txtSearch.text().strip()
-                start_date = self.start_date_edit.date().toString(DATE_DB)
-                end_date = self.end_date_edit.date().toString(DATE_DB)
 
-                cursor = self.conn.cursor()
-                query = f"SELECT * FROM TableGarden{self.current_year} WHERE Date BETWEEN ? AND ? "
-                params = [start_date, end_date]
+            column_label = self.cbColumns.currentText()
+            years = self._fiscal_years_for_date_range(start_q, end_q)
+            if not years:
+                self._fill_table_rows([])
+                self.StatistikaVypocet()
+                return
 
-                if search_text:
-                    query += f"AND [{column_name}] LIKE ? "
-                    params.append(f"%{search_text}%")
+            all_rows = []
+            skipped_years = []
+            for year in years:
+                fetched, skipped = self._search_rows_in_year(
+                    year, start_date, end_date, column_label, search_text
+                )
+                if skipped:
+                    skipped_years.append(year)
+                all_rows.extend(fetched)
 
-                query += "ORDER BY Date DESC, Id DESC"
+            if search_text and not all_rows and skipped_years and len(skipped_years) == len(years):
+                QMessageBox.information(
+                    self,
+                    "Search",
+                    f"Column '{column_label}' is not available in tables for the selected date range.",
+                )
+                return
 
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
-                self._fill_table_rows(rows)
-            else:
-                self.NacitajDatabazu()
-
+            all_rows.sort(key=lambda item: (item[1][1] or "", item[1][0] or 0), reverse=True)
+            self._fill_table_rows(all_rows)
             self.StatistikaVypocet()
+            self.update_search_completer()
         except Exception as ex:
             QMessageBox.critical(self, "Chyba", f"Chyba počas vyhľadávania: {str(ex)}")
+
+    def _search_rows_in_year(self, year, start_date, end_date, column_label, search_text):
+        """Vráti ([(year, row), ...], skipped_because_missing_column)."""
+        date_col = self._resolve_search_column_for_year("Date", year)
+        if not date_col:
+            return [], False
+
+        cursor = self.conn.cursor()
+        query = (
+            f"SELECT * FROM TableGarden{year} "
+            f"WHERE date([{date_col}]) BETWEEN date(?) AND date(?) "
+        )
+        params = [start_date, end_date]
+
+        if search_text:
+            column_name = self._resolve_search_column_for_year(column_label, year)
+            if not column_name:
+                return [], True
+
+            if column_label == "Date" or column_name.lower() == "date":
+                parsed = parse_date(search_text)
+                if parsed.isValid():
+                    query += f"AND date([{column_name}]) = date(?) "
+                    params.append(parsed.toString(DATE_DB))
+                else:
+                    query += f"AND CAST([{column_name}] AS TEXT) LIKE ? "
+                    params.append(f"%{search_text}%")
+            else:
+                query += f"AND CAST([{column_name}] AS TEXT) LIKE ? "
+                params.append(f"%{search_text}%")
+
+        query += f"ORDER BY date([{date_col}]) DESC, Id DESC"
+        rows = cursor.execute(query, params).fetchall()
+        return [(year, row) for row in rows], False
 
     def handle_header_click(self, column):
         if self.last_sorted_column == column:
@@ -1202,18 +1261,32 @@ class FrmGarden(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.VymazatZaznam()
             self.NacitajDatabazu()
+            self.load_unique_clients()
+            self.load_unique_staff()
 
     def DGZoznam_CellClick(self, row, column):
         None
 
     def DGZoznam_CellContentDoubleClick(self, row, column):
         date_item = self.DGZoznam.item(row, 0)
-        record_id = date_item.data(Qt.ItemDataRole.UserRole) if date_item else None
-        self.Riadok = record_id if record_id is not None else self.row_ids[row]
-        self.editing_fiscal_year = self.current_year
+        meta = date_item.data(Qt.ItemDataRole.UserRole) if date_item else None
+        if isinstance(meta, dict):
+            record_id = meta.get("id")
+            record_year = meta.get("year") or self.current_year
+        else:
+            fallback = self.row_ids[row] if row < len(self.row_ids) else None
+            if isinstance(fallback, dict):
+                record_id = fallback.get("id")
+                record_year = fallback.get("year") or self.current_year
+            else:
+                record_id = meta if meta is not None else fallback
+                record_year = self.current_year
+
         if row != -1:
             self.MazanietxtPopridaniDoSql()
             self.txtSearch.clear()
+            self.Riadok = record_id
+            self.editing_fiscal_year = record_year
 
             self.txtSelectDate.setText(to_ui_date(self.DGZoznam.item(row, 0).text()))
             self.txtClients.setText(self.DGZoznam.item(row, 1).text())
@@ -1223,9 +1296,11 @@ class FrmGarden(QMainWindow):
             self.txtExpenses.setText(self.DGZoznam.item(row, 5).text())
             self.txtExpensesCost.setText(self.DGZoznam.item(row, 6).text())
 
-            if self.current_year >= "2025":
-                self.txtCashForStaff.setText(self.DGZoznam.item(row, 7).text())
-                self.txtCashForStaffName.setText(self.DGZoznam.item(row, 8).text())
+            if str(record_year) >= "2025":
+                staff_cash = self.DGZoznam.item(row, 7)
+                staff_name = self.DGZoznam.item(row, 8)
+                self.txtCashForStaff.setText(staff_cash.text() if staff_cash else "")
+                self.txtCashForStaffName.setText(staff_name.text() if staff_name else "")
 
             self.btnEdit.setEnabled(True)
             self.btnDelete.setEnabled(True)
@@ -1338,6 +1413,8 @@ class FrmGarden(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.ZalozitZaznam()
             self.NacitajDatabazu()
+            self.load_unique_clients()
+            self.load_unique_staff()
 
     def btnEdit_Click(self):
         valid, message = self._validate_record()
@@ -1356,15 +1433,26 @@ class FrmGarden(QMainWindow):
             self.UpdateZaznam()
             self.NacitajDatabazu()
             self.MazanietxtPopridaniDoSql()
+            self.load_unique_clients()
+            self.load_unique_staff()
 
     def _fill_table_rows(self, rows):
-        """Naplní tabuľku; dátum zobrazí vo formáte dd.MM.yyyy."""
-        self.DGZoznam.setRowCount(len(rows))
+        """Naplní tabuľku; dátum zobrazí vo formáte dd.MM.yyyy.
+        rows: sqlite riadky ALEBO (fiscal_year, sqlite_row).
+        """
+        normalized = []
+        for item in rows:
+            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
+                normalized.append(item)
+            else:
+                normalized.append((self.current_year, item))
+
+        self.DGZoznam.setRowCount(len(normalized))
         self.row_ids = []
-        for row_idx, row in enumerate(rows):
+        for row_idx, (fiscal_year, row) in enumerate(normalized):
             record_id = row[0]
-            self.row_ids.append(record_id)
-            for col_idx, value in enumerate(row[1:]):
+            self.row_ids.append({"id": record_id, "year": fiscal_year})
+            for col_idx, value in enumerate(row[1:9]):
                 numeric_columns = [2, 3, 4, 6, 7]
                 if col_idx == 0:
                     parsed = parse_date(value)
@@ -1372,7 +1460,10 @@ class FrmGarden(QMainWindow):
                     item = QTableWidgetItem(display_date)
                     if parsed.isValid():
                         item.setData(Qt.ItemDataRole.EditRole, parsed.toString(DATE_DB))
-                    item.setData(Qt.ItemDataRole.UserRole, record_id)
+                    item.setData(
+                        Qt.ItemDataRole.UserRole,
+                        {"id": record_id, "year": fiscal_year},
+                    )
                 elif col_idx in numeric_columns:
                     item = QTableWidgetItem()
                     item.setData(Qt.ItemDataRole.EditRole, float(value) if value else 0.0)
@@ -1404,59 +1495,193 @@ class FrmGarden(QMainWindow):
         self.row_ids = []
         for row in range(self.DGZoznam.rowCount()):
             item = self.DGZoznam.item(row, 0)
-            record_id = item.data(Qt.ItemDataRole.UserRole) if item else None
-            self.row_ids.append(record_id)
+            meta = item.data(Qt.ItemDataRole.UserRole) if item else None
+            self.row_ids.append(meta)
 
     def NacitajDatabazu(self):
         try:
+            date_col = self._resolve_search_column_for_year("Date", self.current_year) or "Date"
             cursor = self.conn.cursor()
-            cursor.execute(f"SELECT * FROM TableGarden{self.current_year} ORDER BY Date DESC, Id DESC")
+            cursor.execute(
+                f"SELECT * FROM TableGarden{self.current_year} "
+                f"ORDER BY date([{date_col}]) DESC, Id DESC"
+            )
             rows = cursor.fetchall()
-            self._fill_table_rows(rows)
+            self._fill_table_rows([(self.current_year, row) for row in rows])
             self.StatistikaVypocet()
         except Exception as ex:
             QMessageBox.critical(self, "Error", str(ex))
 
     def load_unique_clients(self):
+        """Autocomplete pre formulár Client — podľa aktuálneho roku v dataview."""
         try:
             cursor = self.conn.cursor()
-            cursor.execute(f"SELECT DISTINCT [CLIENTS NAME] FROM TableGarden{self.current_year};")
+            client_col = self._resolve_search_column_for_year("CLIENTS NAME", self.current_year) or "CLIENTS NAME"
+            cursor.execute(
+                f"SELECT DISTINCT [{client_col}] FROM TableGarden{self.current_year} "
+                f"WHERE [{client_col}] IS NOT NULL AND TRIM([{client_col}]) != '' "
+                f"ORDER BY [{client_col}] COLLATE NOCASE;"
+            )
             rows_current = cursor.fetchall()
             self.unique_clients = [row[0] for row in rows_current if row[0]]
 
             if not self.unique_clients:
                 previous_year = str(int(self.current_year) - 1)
-                cursor.execute(
-                    f"SELECT name FROM sqlite_master WHERE type='table' AND name='TableGarden{previous_year}';"
-                )
-                if cursor.fetchone():
+                if self.check_table_exists(previous_year):
+                    prev_col = self._resolve_search_column_for_year("CLIENTS NAME", previous_year) or client_col
                     cursor.execute(
-                        f"SELECT DISTINCT [CLIENTS NAME] FROM TableGarden{previous_year};"
+                        f"SELECT DISTINCT [{prev_col}] FROM TableGarden{previous_year} "
+                        f"WHERE [{prev_col}] IS NOT NULL AND TRIM([{prev_col}]) != '' "
+                        f"ORDER BY [{prev_col}] COLLATE NOCASE;"
                     )
                     rows_previous = cursor.fetchall()
                     self.unique_clients = [row[0] for row in rows_previous if row[0]]
 
             completer = QCompleter(self.unique_clients, self)
             completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+            completer.setFilterMode(Qt.MatchFlag.MatchContains)
             self.txtClients.setCompleter(completer)
+            self.update_search_completer()
         except Exception as ex:
             QMessageBox.critical(self, "Error", f"Chyba pri načítaní klientov: {str(ex)}")
 
     def load_unique_staff(self):
-        if self.cbRok.currentText() >= "2025":
+        """Autocomplete pre formulár Staff — podľa aktuálneho roku v dataview."""
+        staff_col = self._resolve_search_column_for_year("CashForStaffName", self.current_year)
+        if staff_col:
             try:
                 cursor = self.conn.cursor()
                 cursor.execute(
-                    f"SELECT DISTINCT [CashForStaffName] FROM TableGarden{self.current_year};"
+                    f"SELECT DISTINCT [{staff_col}] FROM TableGarden{self.current_year} "
+                    f"WHERE [{staff_col}] IS NOT NULL AND TRIM([{staff_col}]) != '' "
+                    f"ORDER BY [{staff_col}] COLLATE NOCASE;"
                 )
                 rows_current = cursor.fetchall()
                 self.unique_staff = [row[0] for row in rows_current if row[0]]
 
                 completer = QCompleter(self.unique_staff, self)
                 completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+                completer.setFilterMode(Qt.MatchFlag.MatchContains)
                 self.txtCashForStaffName.setCompleter(completer)
             except Exception as ex:
-                QMessageBox.critical(self, "Error", f"Chyba pri načítaní klientov: {str(ex)}")
+                QMessageBox.critical(self, "Error", f"Chyba pri načítaní staff: {str(ex)}")
+                self.unique_staff = []
+        else:
+            self.unique_staff = []
+        self.update_search_completer()
+
+    def _fiscal_years_for_date_range(self, start_qdate, end_qdate):
+        """Fiskálne roky, ktoré sa prekrývajú s From/To (bez ohľadu na roletu Year)."""
+        if start_qdate > end_qdate:
+            start_qdate, end_qdate = end_qdate, start_qdate
+        years = []
+        for year in range(start_qdate.year() - 1, end_qdate.year() + 1):
+            fy_start = QDate(year, 4, 1)
+            fy_end = QDate(year + 1, 3, 31)
+            if fy_start <= end_qdate and fy_end >= start_qdate and self.check_table_exists(str(year)):
+                years.append(str(year))
+        return years
+
+    def _table_column_map_for_year(self, year):
+        cursor = self.conn.cursor()
+        cursor.execute(f"PRAGMA table_info(TableGarden{year})")
+        return {row[1].lower(): row[1] for row in cursor.fetchall()}
+
+    def _resolve_search_column_for_year(self, combo_label, year):
+        """Nájde skutočný názov stĺpca v DB pre daný fiskálny rok."""
+        aliases = {
+            "Date": ["Date", "DATE"],
+            "CLIENTS NAME": ["CLIENTS NAME"],
+            "Cash": ["Cash", "CASH"],
+            "CHECK": ["CHECK", "Check"],
+            "BANK TRANSFER": ["BANK TRANSFER"],
+            "Expenses": ["Expenses", "EXPENSES"],
+            "EXPENSES COSTS": ["EXPENSES COSTS"],
+            "CashForStaff": ["CashForStaff"],
+            "CashForStaffName": ["CashForStaffName"],
+        }
+        cols = self._table_column_map_for_year(year)
+        for name in aliases.get(combo_label, [combo_label]):
+            real = cols.get(name.lower())
+            if real:
+                return real
+        return None
+
+    def _resolve_search_column(self, combo_label):
+        """Kompatibilita: resolve podľa aktuálneho roku v dataview."""
+        return self._resolve_search_column_for_year(combo_label, self.current_year)
+
+    def _distinct_values_for_search_column(self, combo_label):
+        """Návrhy do search textboxu z DB podľa From/To (nie podľa rolety Year)."""
+        start_q = self.start_date_edit.date()
+        end_q = self.end_date_edit.date()
+        years = self._fiscal_years_for_date_range(start_q, end_q)
+        if not years:
+            return []
+
+        start_date = min(start_q, end_q).toString(DATE_DB)
+        end_date = max(start_q, end_q).toString(DATE_DB)
+        values = []
+        seen = set()
+        cursor = self.conn.cursor()
+
+        for year in years:
+            column_name = self._resolve_search_column_for_year(combo_label, year)
+            date_col = self._resolve_search_column_for_year("Date", year)
+            if not column_name or not date_col:
+                continue
+
+            if combo_label == "Date" or column_name.lower() == "date":
+                cursor.execute(
+                    f"SELECT DISTINCT [{column_name}] FROM TableGarden{year} "
+                    f"WHERE date([{date_col}]) BETWEEN date(?) AND date(?) "
+                    f"AND [{column_name}] IS NOT NULL AND TRIM([{column_name}]) != '' "
+                    f"ORDER BY [{column_name}] DESC",
+                    (start_date, end_date),
+                )
+                for (raw,) in cursor.fetchall():
+                    for candidate in (to_ui_date(raw), str(raw) if raw else ""):
+                        key = candidate.strip().lower()
+                        if candidate and key not in seen:
+                            seen.add(key)
+                            values.append(candidate)
+            else:
+                cursor.execute(
+                    f"SELECT DISTINCT CAST([{column_name}] AS TEXT) FROM TableGarden{year} "
+                    f"WHERE date([{date_col}]) BETWEEN date(?) AND date(?) "
+                    f"AND [{column_name}] IS NOT NULL AND TRIM(CAST([{column_name}] AS TEXT)) != '' "
+                    f"ORDER BY 1 COLLATE NOCASE",
+                    (start_date, end_date),
+                )
+                for (raw,) in cursor.fetchall():
+                    text = str(raw).strip() if raw is not None else ""
+                    key = text.lower()
+                    if text and key not in seen:
+                        seen.add(key)
+                        values.append(text)
+
+        if combo_label != "Date":
+            values.sort(key=lambda s: s.lower())
+        return values
+
+    def update_search_completer(self, *_args):
+        """Autocomplete v search textboxe podľa search rolety (stĺpec), nie podľa Year."""
+        if not hasattr(self, "_search_completer_model") or not hasattr(self, "cbColumns"):
+            return
+        try:
+            values = self._distinct_values_for_search_column(self.cbColumns.currentText())
+            self._search_completer_model.setStringList(values)
+            column = self.cbColumns.currentText()
+            if column == "CLIENTS NAME":
+                self.txtSearch.setPlaceholderText("Type client name…")
+            elif column == "CashForStaffName":
+                self.txtSearch.setPlaceholderText("Type staff name…")
+            elif column == "Expenses":
+                self.txtSearch.setPlaceholderText("Type expense description…")
+            else:
+                self.txtSearch.setPlaceholderText(f"Search in {column}…")
+        except Exception:
+            self._search_completer_model.setStringList([])
 
     def _record_field_values(self):
         return (
